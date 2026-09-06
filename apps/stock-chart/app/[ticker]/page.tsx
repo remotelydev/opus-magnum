@@ -23,24 +23,22 @@ export async function generateMetadata({
 export default async function TickerPage({ params }: TickerPageProps) {
   const { ticker } = await params;
   const symbol = ticker.toUpperCase();
-  const { series, error } = await resolveMarketData(symbol);
+  const { series } = await resolveMarketData(symbol);
 
   return (
-    <main className="flex min-h-screen flex-col gap-4 bg-[#0b0f14] px-4 py-4 text-zinc-100 sm:px-6">
+    <main className="flex min-h-screen flex-col gap-6 bg-background px-5 py-6 text-foreground sm:px-8">
       <header className="w-full">
         <TickerForm initialTicker={symbol} />
       </header>
 
-      <section className="min-h-0 flex-1 rounded border border-zinc-800 bg-[#0b0f14]">
-        {series ? (
-          <StockChart candles={series.candles} />
-        ) : (
-          <div className="flex h-[420px] items-center justify-center px-6 text-center text-zinc-400">
-            No candle data for {symbol}. Try AAPL, MSFT, or NVDA fixtures, or set
-            FINNHUB_API_KEY for live data.
-          </div>
-        )}
-      </section>
+      {series ? (
+        <StockChart candles={series.candles} />
+      ) : (
+        <div className="flex h-[420px] items-center justify-center px-6 text-center text-mute">
+          No candle data for {symbol}. Try AAPL, MSFT, or NVDA fixtures, or set
+          FINNHUB_API_KEY for live data.
+        </div>
+      )}
     </main>
   );
 }

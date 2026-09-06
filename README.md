@@ -17,7 +17,7 @@ Personal React / Next.js lab. Public on GitLab for now; self-host later when I h
 ```bash
 pnpm install
 cp .env.example .env.local   # optional: set FINNHUB_API_KEY
-pnpm dev                     # http://localhost:3000 → /AAPL
+pnpm dev                     # starts on :3000 (or next free port) → /AAPL
 ```
 
 Optional live data: free key from [finnhub.io/register](https://finnhub.io/register). Without it, the app uses committed fixtures (`AAPL`, `MSFT`, `NVDA`). Refresh fixtures from Finnhub (replaces the seed placeholders) with:

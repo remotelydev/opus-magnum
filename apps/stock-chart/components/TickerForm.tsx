@@ -22,7 +22,7 @@ export function TickerForm({ initialTicker }: TickerFormProps) {
   return (
     <form
       onSubmit={onSubmit}
-      className="flex w-full items-center gap-2 border-b border-zinc-100 pb-1"
+      className="flex w-full items-center gap-3 border-b border-rule pb-2"
     >
       <label htmlFor="ticker" className="sr-only">
         Ticker
@@ -34,15 +34,15 @@ export function TickerForm({ initialTicker }: TickerFormProps) {
         onChange={(event) => setValue(event.target.value.toUpperCase())}
         spellCheck={false}
         autoComplete="off"
-        className="min-w-0 flex-1 bg-transparent font-mono text-2xl font-bold tracking-tight text-zinc-100 outline-none placeholder:text-zinc-600"
+        className="min-w-0 flex-1 bg-transparent font-sans text-3xl font-bold tracking-tight text-stone-800 outline-none placeholder:text-stone-400"
         placeholder="AAPL"
       />
       <button
         type="submit"
-        className="shrink-0 text-zinc-100 hover:text-zinc-300"
+        className="shrink-0 text-stone-700 hover:text-stone-900"
         aria-label="Search ticker"
       >
-        <MagnifyingGlassIcon className="size-6" aria-hidden="true" />
+        <MagnifyingGlassIcon className="size-6 stroke-[1.5]" aria-hidden="true" />
       </button>
     </form>
   );
