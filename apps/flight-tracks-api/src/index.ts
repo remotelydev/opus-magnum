@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import { loadConfig } from "./config.js";
+import { createFlights } from "./generator/flights.js";
 
 const config = loadConfig();
 
@@ -18,6 +19,7 @@ app.get("/meta", async () => {
     server: config.server,
     generator: config.generator,
     chaos: config.chaos,
+    sampleFlight: createFlights()[0],
   };
 });
 
