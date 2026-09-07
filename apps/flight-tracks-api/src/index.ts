@@ -13,13 +13,15 @@ app.get("/health", async () => {
 });
 
 app.get("/meta", async () => {
+  const flights = createFlights(config.generator);
   return {
     service: "flight-tracks-api",
     protocol: "TRK1",
     server: config.server,
     generator: config.generator,
     chaos: config.chaos,
-    sampleFlight: createFlights()[0],
+    flightCountGenerated: flights.length,
+    sampleFlight: flights[0],
   };
 });
 
