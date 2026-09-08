@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import { loadConfig } from "./config.js";
 import { createFlights } from "./generator/flights.js";
+import { samplesAlongRoute } from "./generator/samples.js";
 
 const config = loadConfig();
 
@@ -22,6 +23,7 @@ app.get("/meta", async () => {
     chaos: config.chaos,
     flightCountGenerated: flights.length,
     sampleFlight: flights[0],
+    samples: samplesAlongRoute(flights[0].waypoints, 0, 1000, 8000, 30),
   };
 });
 
