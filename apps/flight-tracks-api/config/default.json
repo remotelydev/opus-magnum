@@ -1,0 +1,24 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8787
+  },
+  "generator": {
+    "seed": 42,
+    "flightCount": 3000,
+    "windowPastSec": 3600,
+    "windowFutureSec": 28800
+  },
+  "chaos": {
+    "delayMs": 0,
+    "jitterMs": 0,
+    "errorRate": 0,
+    "errorStatus": 503,
+    "slowBody": false,
+    "slowBodyChunkBytes": 4096,
+    "slowBodyChunkDelayMs": 40,
+    "truncate": false,
+    "truncateKeepRatio": 0.5,
+    "corrupt": false
+  }
+}
