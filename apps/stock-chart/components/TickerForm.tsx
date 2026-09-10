@@ -25,7 +25,7 @@ export function TickerForm({ initialTicker }: TickerFormProps) {
   return (
     <form
       onSubmit={onSubmit}
-      className="flex w-full items-center gap-3 border-b border-rule pb-2"
+      className="flex w-full items-center gap-3"
     >
       <Label htmlFor="ticker" className="sr-only">
         Ticker
