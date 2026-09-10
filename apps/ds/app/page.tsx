@@ -1,3 +1,5 @@
+import { Button } from "@opus-magnum/ui/components/button";
+
 const surfaces = [
   { token: "background", className: "bg-background" },
   { token: "background-glow", className: "bg-background-glow" },
@@ -69,6 +71,68 @@ function Specimen() {
         <div>
           <p className="font-mono text-xs text-mute">mono / text-sm</p>
           <p className="font-mono text-sm">AAPL 229.12 +1.4%</p>
+        </div>
+      </div>
+
+      <h2 className="mt-12 font-sans text-lg font-bold">Button</h2>
+      <div className="mt-4 space-y-6">
+        <div>
+          <p className="font-mono text-xs text-mute">
+            Button / variant=default
+          </p>
+          <div className="mt-2">
+            <Button>Subscribe</Button>
+          </div>
+        </div>
+        <div>
+          <p className="font-mono text-xs text-mute">
+            Button / variant=outline
+          </p>
+          <div className="mt-2">
+            <Button variant="outline">Subscribe</Button>
+          </div>
+        </div>
+        <div>
+          <p className="font-mono text-xs text-mute">
+            Button / variant=secondary
+          </p>
+          <div className="mt-2">
+            <Button variant="secondary">Subscribe</Button>
+          </div>
+        </div>
+        <div>
+          <p className="font-mono text-xs text-mute">
+            Button / variant=ghost
+          </p>
+          <div className="mt-2">
+            <Button variant="ghost">Subscribe</Button>
+          </div>
+        </div>
+        <div>
+          <p className="font-mono text-xs text-mute">
+            Button / variant=destructive
+          </p>
+          <div className="mt-2">
+            <Button variant="destructive">Subscribe</Button>
+          </div>
+        </div>
+        <div>
+          <p className="font-mono text-xs text-mute">Button / variant=link</p>
+          <div className="mt-2">
+            <Button variant="link">Subscribe</Button>
+          </div>
+        </div>
+        <div>
+          <p className="font-mono text-xs text-mute">Button / size=xs</p>
+          <div className="mt-2">
+            <Button size="xs">Subscribe</Button>
+          </div>
+        </div>
+        <div>
+          <p className="font-mono text-xs text-mute">Button / size=lg</p>
+          <div className="mt-2">
+            <Button size="lg">Subscribe</Button>
+          </div>
         </div>
       </div>
 

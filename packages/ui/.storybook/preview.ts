@@ -8,7 +8,7 @@ const preview: Preview = {
     backgrounds: { disable: true },
     options: {
       storySort: {
-        order: ["Foundations", ["Colors", "Typography"]],
+        order: ["Foundations", ["Colors", "Typography"], "Components"],
       },
     },
   },
