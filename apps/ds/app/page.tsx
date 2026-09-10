@@ -1,6 +1,17 @@
+import { Badge } from "@opus-magnum/ui/components/badge";
 import { Button } from "@opus-magnum/ui/components/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@opus-magnum/ui/components/card";
 import { Input } from "@opus-magnum/ui/components/input";
 import { Label } from "@opus-magnum/ui/components/label";
+import { Separator } from "@opus-magnum/ui/components/separator";
 
 const surfaces = [
   { token: "background", className: "bg-background" },
@@ -18,6 +29,15 @@ const inks = [
   { token: "ring", className: "bg-ring" },
 ] as const;
 
+const badgeVariants = [
+  "default",
+  "secondary",
+  "outline",
+  "ghost",
+  "destructive",
+  "link",
+] as const;
+
 function Swatch({ token, className }: { token: string; className: string }) {
   return (
     <div className="flex flex-col gap-2">
@@ -27,13 +47,22 @@ function Swatch({ token, className }: { token: string; className: string }) {
   );
 }
 
-function Specimen() {
+function Specimen({ idPrefix }: { idPrefix: string }) {
   return (
     <div className="bg-background px-8 py-10 text-foreground">
-      <p className="font-mono text-xs tracking-wide text-mute uppercase">
-        opus-magnum / tokens
-      </p>
-      <h1 className="mt-2 font-sans text-4xl font-bold tracking-tight">
+      <div className="max-w-3xl">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="font-mono text-xs tracking-wide text-mute uppercase">
+          opus-magnum / specimen
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Badge>Lyra</Badge>
+          <Badge variant="secondary">Newspaper</Badge>
+          <Badge variant="outline">Live</Badge>
+        </div>
+      </div>
+
+      <h1 className="mt-6 font-sans text-4xl font-bold tracking-tight">
         Newsreader on the page
       </h1>
       <p className="mt-3 max-w-xl text-lg">
@@ -46,7 +75,58 @@ function Specimen() {
         Muted text uses the mute token — captions, placeholders, helper copy.
       </p>
 
-      <div className="mt-10 max-w-xl space-y-6 border-t border-rule pt-8">
+      <Separator className="my-10" />
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="font-sans text-2xl font-bold tracking-tight">
+              AAPL
+            </CardTitle>
+            <CardDescription>Closing auction</CardDescription>
+            <CardAction>
+              <Badge variant="outline">+1.4%</Badge>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <p className="font-sans text-base">
+              The newspaper wash sits on background, with paper for elevated
+              surfaces and rule for hairline dividers.
+            </p>
+            <p className="mt-3 font-mono text-sm">AAPL 229.12 +1.4%</p>
+          </CardContent>
+          <CardFooter>
+            <form className="flex w-full items-end gap-2">
+              <div className="min-w-0 flex-1 space-y-2">
+                <Label htmlFor={`${idPrefix}-display-lookup`}>Look up</Label>
+                <Input id={`${idPrefix}-display-lookup`} placeholder="NVDA" />
+              </div>
+              <Button type="button">Go</Button>
+            </form>
+          </CardFooter>
+        </Card>
+
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle>After hours</CardTitle>
+            <CardDescription>Quiet tape until the open.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-mute">
+              Separator below is the same rule token as the page hairline.
+            </p>
+            <Separator className="my-3" />
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="secondary">Regular</Badge>
+              <Badge variant="ghost">Delayed</Badge>
+              <Badge variant="destructive">Halt</Badge>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      </div>
+
+      <div className="mt-12 max-w-xl space-y-6 border-t border-rule pt-8">
         <div>
           <p className="font-mono text-xs text-mute">h1 / text-4xl / bold</p>
           <p className="font-sans text-4xl font-bold tracking-tight">
@@ -143,20 +223,20 @@ function Specimen() {
         <div>
           <p className="font-mono text-xs text-mute">Label</p>
           <div className="mt-2">
-            <Label htmlFor="specimen-label">Ticker</Label>
+            <Label htmlFor={`${idPrefix}-label`}>Ticker</Label>
           </div>
         </div>
         <div>
           <p className="font-mono text-xs text-mute">Input</p>
           <div className="mt-2">
-            <Input id="specimen-bare" placeholder="AAPL" />
+            <Input id={`${idPrefix}-bare`} placeholder="AAPL" />
           </div>
         </div>
         <div>
           <p className="font-mono text-xs text-mute">Label + Input</p>
           <div className="mt-2 space-y-2">
-            <Label htmlFor="specimen-symbol">Symbol</Label>
-            <Input id="specimen-symbol" placeholder="MSFT" />
+            <Label htmlFor={`${idPrefix}-symbol`}>Symbol</Label>
+            <Input id={`${idPrefix}-symbol`} placeholder="MSFT" />
           </div>
         </div>
         <div>
@@ -165,11 +245,82 @@ function Specimen() {
           </p>
           <form className="mt-2 flex items-end gap-2">
             <div className="min-w-0 flex-1 space-y-2">
-              <Label htmlFor="specimen-lookup">Look up</Label>
-              <Input id="specimen-lookup" placeholder="NVDA" />
+              <Label htmlFor={`${idPrefix}-lookup`}>Look up</Label>
+              <Input id={`${idPrefix}-lookup`} placeholder="NVDA" />
             </div>
             <Button type="button">Go</Button>
           </form>
+        </div>
+      </div>
+
+      <h2 className="mt-12 font-sans text-lg font-bold">Badge</h2>
+      <div className="mt-4 space-y-6">
+        {badgeVariants.map((variant) => (
+          <div key={variant}>
+            <p className="font-mono text-xs text-mute">
+              Badge / variant={variant}
+            </p>
+            <div className="mt-2">
+              <Badge variant={variant}>Live</Badge>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <h2 className="mt-12 font-sans text-lg font-bold">Card</h2>
+      <div className="mt-4 max-w-md space-y-6">
+        <div>
+          <p className="font-mono text-xs text-mute">Card / size=default</p>
+          <div className="mt-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Closing auction</CardTitle>
+                <CardDescription>
+                  Elevated on paper, ringed with foreground/10.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                The newspaper wash sits on background, with paper for
+                elevated surfaces.
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+        <div>
+          <p className="font-mono text-xs text-mute">Card / size=sm</p>
+          <div className="mt-2">
+            <Card size="sm">
+              <CardHeader>
+                <CardTitle>After hours</CardTitle>
+                <CardDescription>Quiet tape until the open.</CardDescription>
+              </CardHeader>
+              <CardContent>Delayed prints only.</CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+
+      <h2 className="mt-12 font-sans text-lg font-bold">Separator</h2>
+      <div className="mt-4 max-w-md space-y-6">
+        <div>
+          <p className="font-mono text-xs text-mute">
+            Separator / orientation=horizontal
+          </p>
+          <div className="mt-2">
+            <p>Above the rule</p>
+            <Separator className="my-4" />
+            <p>Below the rule</p>
+          </div>
+        </div>
+        <div>
+          <p className="font-mono text-xs text-mute">
+            Separator / orientation=vertical
+          </p>
+          <div className="mt-2 flex h-16 items-center gap-4">
+            <span>Bid</span>
+            <Separator orientation="vertical" />
+            <span>Ask</span>
+          </div>
         </div>
       </div>
 
@@ -201,9 +352,9 @@ function Specimen() {
 export default function Page() {
   return (
     <main>
-      <Specimen />
+      <Specimen idPrefix="light" />
       <div className="dark">
-        <Specimen />
+        <Specimen idPrefix="dark" />
       </div>
     </main>
   );
