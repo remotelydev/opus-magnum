@@ -2,6 +2,9 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+@source "../**/*.{ts,tsx}";
+@source "../../.storybook/**/*.{ts,tsx}";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -142,5 +145,6 @@
       radial-gradient(ellipse at top, var(--background-glow), transparent 55%),
       var(--background);
     color: var(--foreground);
+    font-family: var(--font-sans);
   }
 }

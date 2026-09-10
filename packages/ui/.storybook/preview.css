@@ -1,0 +1,10 @@
+@import "@fontsource/newsreader/latin-400.css";
+@import "@fontsource/newsreader/latin-400-italic.css";
+@import "@fontsource/newsreader/latin-700.css";
+@import "@fontsource/geist-mono/latin-400.css";
+@import "@fontsource/geist-mono/latin-700.css";
+
+:root {
+  --font-newsreader: "Newsreader";
+  --font-geist-mono: "Geist Mono";
+}
