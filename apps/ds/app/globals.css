@@ -1,0 +1,3 @@
+@import "@opus-magnum/ui/globals.css";
+
+@source "../**/*.{ts,tsx}";
