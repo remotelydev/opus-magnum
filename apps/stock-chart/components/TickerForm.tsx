@@ -3,6 +3,9 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
+import { Button } from "@opus-magnum/ui/components/button";
+import { Input } from "@opus-magnum/ui/components/input";
+import { Label } from "@opus-magnum/ui/components/label";
 
 type TickerFormProps = {
   initialTicker: string;
@@ -24,26 +27,28 @@ export function TickerForm({ initialTicker }: TickerFormProps) {
       onSubmit={onSubmit}
       className="flex w-full items-center gap-3 border-b border-rule pb-2"
     >
-      <label htmlFor="ticker" className="sr-only">
+      <Label htmlFor="ticker" className="sr-only">
         Ticker
-      </label>
-      <input
+      </Label>
+      <Input
         id="ticker"
         name="ticker"
         value={value}
-        onChange={(event) => setValue(event.target.value.toUpperCase())}
+        onValueChange={(next) => setValue(next.toUpperCase())}
         spellCheck={false}
         autoComplete="off"
-        className="min-w-0 flex-1 bg-transparent font-sans text-3xl font-bold tracking-tight text-stone-800 outline-none placeholder:text-stone-400"
         placeholder="AAPL"
+        className="h-auto min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-3xl font-bold tracking-tight shadow-none placeholder:text-mute focus-visible:ring-0 md:text-3xl"
       />
-      <button
+      <Button
         type="submit"
-        className="shrink-0 text-stone-700 hover:text-stone-900"
+        variant="ghost"
+        size="icon"
+        className="size-auto text-foreground hover:bg-transparent hover:text-foreground"
         aria-label="Search ticker"
       >
         <MagnifyingGlassIcon className="size-6 stroke-[1.5]" aria-hidden="true" />
-      </button>
+      </Button>
     </form>
   );
 }

@@ -1,4 +1,6 @@
 import { Button } from "@opus-magnum/ui/components/button";
+import { Input } from "@opus-magnum/ui/components/input";
+import { Label } from "@opus-magnum/ui/components/label";
 
 const surfaces = [
   { token: "background", className: "bg-background" },
@@ -133,6 +135,41 @@ function Specimen() {
           <div className="mt-2">
             <Button size="lg">Subscribe</Button>
           </div>
+        </div>
+      </div>
+
+      <h2 className="mt-12 font-sans text-lg font-bold">Field</h2>
+      <div className="mt-4 max-w-sm space-y-6">
+        <div>
+          <p className="font-mono text-xs text-mute">Label</p>
+          <div className="mt-2">
+            <Label htmlFor="specimen-label">Ticker</Label>
+          </div>
+        </div>
+        <div>
+          <p className="font-mono text-xs text-mute">Input</p>
+          <div className="mt-2">
+            <Input id="specimen-bare" placeholder="AAPL" />
+          </div>
+        </div>
+        <div>
+          <p className="font-mono text-xs text-mute">Label + Input</p>
+          <div className="mt-2 space-y-2">
+            <Label htmlFor="specimen-symbol">Symbol</Label>
+            <Input id="specimen-symbol" placeholder="MSFT" />
+          </div>
+        </div>
+        <div>
+          <p className="font-mono text-xs text-mute">
+            Label + Input + Button
+          </p>
+          <form className="mt-2 flex items-end gap-2">
+            <div className="min-w-0 flex-1 space-y-2">
+              <Label htmlFor="specimen-lookup">Look up</Label>
+              <Input id="specimen-lookup" placeholder="NVDA" />
+            </div>
+            <Button type="button">Go</Button>
+          </form>
         </div>
       </div>
 

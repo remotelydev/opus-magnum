@@ -13,6 +13,7 @@ loadEnv({ path: path.join(appDir, ".env.local"), override: true, quiet: true });
 
 const nextConfig: NextConfig = {
   agentRules: false,
+  transpilePackages: ["@opus-magnum/ui"],
 };
 
 export default nextConfig;

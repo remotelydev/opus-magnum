@@ -3,6 +3,8 @@
 @import "shadcn/tailwind.css";
 
 @source "../**/*.{ts,tsx}";
+@source "../../../apps/ds/**/*.{ts,tsx}";
+@source "../../../apps/stock-chart/**/*.{ts,tsx}";
 @source "../../.storybook/**/*.{ts,tsx}";
 
 @custom-variant dark (&:is(.dark *));
