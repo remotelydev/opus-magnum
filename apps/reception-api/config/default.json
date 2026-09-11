@@ -1,0 +1,23 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8788
+  },
+  "timezone": "Europe/Warsaw",
+  "ringCount": 3,
+  "clinic": {
+    "name": "Klinika (placeholder)",
+    "address": "adres do uzupełnienia",
+    "parking": "",
+    "services": []
+  },
+  "hours": {
+    "monday": { "open": "08:00", "close": "20:00" },
+    "tuesday": { "open": "08:00", "close": "20:00" },
+    "wednesday": { "open": "08:00", "close": "20:00" },
+    "thursday": { "open": "08:00", "close": "20:00" },
+    "friday": { "open": "08:00", "close": "20:00" },
+    "saturday": { "open": "10:00", "close": "15:00" },
+    "sunday": null
+  }
+}
