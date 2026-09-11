@@ -6,6 +6,11 @@
   "brand": "DentaPlus+",
   "timezone": "Europe/Warsaw",
   "ringCount": 3,
+  "prismic": {
+    "api": "https://dentaplus.cdn.prismic.io/api/v2",
+    "cennikUid": "cennik",
+    "lang": "pl"
+  },
   "locations": [
     {
       "id": "turek",

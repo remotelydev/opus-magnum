@@ -35,11 +35,18 @@ export interface ServerConfig {
   port: number;
 }
 
+export interface PrismicConfig {
+  api: string;
+  cennikUid: string;
+  lang: string;
+}
+
 export interface AppConfig {
   server: ServerConfig;
   brand: string;
   timezone: string;
   ringCount: number;
+  prismic: PrismicConfig;
   locations: LocationConfig[];
 }
 
