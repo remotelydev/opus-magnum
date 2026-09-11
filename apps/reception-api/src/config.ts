@@ -9,10 +9,24 @@ export interface DayHours {
   close: string;
 }
 
-export interface ClinicConfig {
+export type WeekHours = {
+  monday: DayHours | null;
+  tuesday: DayHours | null;
+  wednesday: DayHours | null;
+  thursday: DayHours | null;
+  friday: DayHours | null;
+  saturday: DayHours | null;
+  sunday: DayHours | null;
+};
+
+export interface LocationConfig {
+  id: string;
   name: string;
   address: string;
   parking: string;
+  phone: string;
+  email: string;
+  hours: WeekHours;
   services: string[];
 }
 
@@ -23,18 +37,10 @@ export interface ServerConfig {
 
 export interface AppConfig {
   server: ServerConfig;
+  brand: string;
   timezone: string;
   ringCount: number;
-  clinic: ClinicConfig;
-  hours: {
-    monday: DayHours | null;
-    tuesday: DayHours | null;
-    wednesday: DayHours | null;
-    thursday: DayHours | null;
-    friday: DayHours | null;
-    saturday: DayHours | null;
-    sunday: DayHours | null;
-  };
+  locations: LocationConfig[];
 }
 
 function loadJson(path: string): unknown {
@@ -46,4 +52,11 @@ export function loadConfig(): AppConfig {
     ? process.env.CONFIG_PATH
     : join(root, "config/default.json");
   return loadJson(path) as AppConfig;
+}
+
+export function findLocation(
+  config: AppConfig,
+  id: string,
+): LocationConfig | undefined {
+  return config.locations.find((location) => location.id === id);
 }

@@ -3,21 +3,45 @@
     "host": "127.0.0.1",
     "port": 8788
   },
+  "brand": "DentaPlus+",
   "timezone": "Europe/Warsaw",
   "ringCount": 3,
-  "clinic": {
-    "name": "Klinika (placeholder)",
-    "address": "adres do uzupełnienia",
-    "parking": "",
-    "services": []
-  },
-  "hours": {
-    "monday": { "open": "08:00", "close": "20:00" },
-    "tuesday": { "open": "08:00", "close": "20:00" },
-    "wednesday": { "open": "08:00", "close": "20:00" },
-    "thursday": { "open": "08:00", "close": "20:00" },
-    "friday": { "open": "08:00", "close": "20:00" },
-    "saturday": { "open": "10:00", "close": "15:00" },
-    "sunday": null
-  }
+  "locations": [
+    {
+      "id": "turek",
+      "name": "DentaPlus+ Turek",
+      "address": "ul. Łąkowa 10, 62-700 Turek",
+      "parking": "",
+      "phone": "+48690649589",
+      "email": "dentaplusturek@o2.pl",
+      "hours": {
+        "monday": { "open": "08:00", "close": "20:00" },
+        "tuesday": { "open": "08:00", "close": "20:00" },
+        "wednesday": { "open": "08:00", "close": "20:00" },
+        "thursday": { "open": "08:00", "close": "20:00" },
+        "friday": { "open": "08:00", "close": "20:00" },
+        "saturday": { "open": "10:00", "close": "15:00" },
+        "sunday": null
+      },
+      "services": []
+    },
+    {
+      "id": "poddebice",
+      "name": "DentaPlus+ Poddębice",
+      "address": "ul. Krasickiego 1C, 99-200 Poddębice",
+      "parking": "",
+      "phone": "+48690512141",
+      "email": "dentaplusklinika@gmail.com",
+      "hours": {
+        "monday": { "open": "08:00", "close": "20:00" },
+        "tuesday": { "open": "08:00", "close": "20:00" },
+        "wednesday": { "open": "08:00", "close": "20:00" },
+        "thursday": { "open": "08:00", "close": "20:00" },
+        "friday": { "open": "08:00", "close": "20:00" },
+        "saturday": { "open": "10:00", "close": "15:00" },
+        "sunday": null
+      },
+      "services": []
+    }
+  ]
 }

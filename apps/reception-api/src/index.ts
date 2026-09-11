@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { loadConfig } from "./config.js";
+import { findLocation, loadConfig } from "./config.js";
 
 const config = loadConfig();
 
@@ -16,6 +16,17 @@ app.get("/health", async () => {
 
 app.get("/config", async () => {
   return config;
+});
+
+app.get<{ Params: { id: string } }>("/config/:id", async (request, reply) => {
+  const location = findLocation(config, request.params.id);
+  if (!location) {
+    return reply.code(404).send({
+      error: "unknown_location",
+      id: request.params.id,
+    });
+  }
+  return location;
 });
 
 await app.listen({ host, port });
