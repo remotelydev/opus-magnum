@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { loadConfig } from "./config.js";
-import { isOpenAt, reply } from "./script.js";
+import { hoursSummary, isOpenAt, reply } from "./script.js";
 
 const config = loadConfig();
 const tz = config.timezone;
@@ -28,12 +28,27 @@ describe("opening hours", () => {
   it("is closed Sunday", () => {
     assert.equal(isOpenAt(turek.hours, sundayClosed, tz), false);
   });
+
+  it("spoken hours come from config JSON, grouped", () => {
+    assert.equal(
+      hoursSummary(turek.hours),
+      "poniedziałek–piątek 08:00–20:00, sobota 10:00–15:00, niedziela nieczynne",
+    );
+  });
+
+  it("spoken hours change when config hours change", () => {
+    const tweaked = structuredClone(turek.hours);
+    tweaked.monday = { open: "09:00", close: "17:00" };
+    const spoken = hoursSummary(tweaked);
+    assert.match(spoken, /poniedziałek 09:00–17:00/);
+    assert.match(spoken, /wtorek–piątek 08:00–20:00/);
+    assert.doesNotMatch(spoken, /poniedziałek–piątek 08:00–20:00/);
+  });
 });
 
 describe("script fixtures", () => {
   it("pending consent only plays the recording notice and does not transcribe", () => {
     const result = reply(config, {
-      lang: "pl",
       locationId: "turek",
       now: mondayOpen,
       consent: "pending",
@@ -46,7 +61,6 @@ describe("script fixtures", () => {
 
   it("opt-out still answers hours and never transcribes", () => {
     const result = reply(config, {
-      lang: "pl",
       locationId: "poddebice",
       now: mondayOpen,
       consent: "no",
@@ -61,21 +75,25 @@ describe("script fixtures", () => {
 
   it("hours for Turek and Poddębice use different address and phone", () => {
     const turek = reply(config, {
-      lang: "pl",
       locationId: "turek",
       now: mondayOpen,
       consent: "yes",
       intent: "hours",
     });
     const poddebice = reply(config, {
-      lang: "pl",
       locationId: "poddebice",
       now: mondayOpen,
       consent: "yes",
       intent: "hours",
     });
+    const turekHours = config.locations.find((item) => item.id === "turek");
+    assert.ok(turekHours);
     assert.match(turek.lines.join(" "), /Łąkowa/);
     assert.match(turek.lines.join(" "), /690649589/);
+    assert.equal(
+      turek.lines.join(" ").includes(hoursSummary(turekHours.hours)),
+      true,
+    );
     assert.match(poddebice.lines.join(" "), /Krasickiego/);
     assert.match(poddebice.lines.join(" "), /690512141/);
     assert.notEqual(turek.lines.join(" "), poddebice.lines.join(" "));
@@ -83,7 +101,6 @@ describe("script fixtures", () => {
 
   it("booking asks for fields and does not promise a clock time", () => {
     const result = reply(config, {
-      lang: "pl",
       locationId: "turek",
       now: mondayOpen,
       consent: "yes",
@@ -96,7 +113,6 @@ describe("script fixtures", () => {
 
   it("emergency while open transfers and does not diagnose", () => {
     const result = reply(config, {
-      lang: "pl",
       locationId: "turek",
       now: mondayOpen,
       consent: "yes",
@@ -110,7 +126,6 @@ describe("script fixtures", () => {
 
   it("emergency while closed leaves a ticket and points to SOR", () => {
     const result = reply(config, {
-      lang: "pl",
       locationId: "turek",
       now: sundayClosed,
       consent: "yes",
@@ -125,7 +140,6 @@ describe("script fixtures", () => {
 
   it("human request while closed tickets and does not fake a transfer", () => {
     const result = reply(config, {
-      lang: "pl",
       locationId: "poddebice",
       now: saturdayClosed,
       consent: "yes",
@@ -138,7 +152,6 @@ describe("script fixtures", () => {
 
   it("angry caller while open transfers", () => {
     const result = reply(config, {
-      lang: "pl",
       locationId: "turek",
       now: mondayOpen,
       consent: "yes",
@@ -146,18 +159,5 @@ describe("script fixtures", () => {
       angry: true,
     });
     assert.equal(result.action, "transfer");
-  });
-
-  it("English hours fixture for Turek", () => {
-    const result = reply(config, {
-      lang: "en",
-      locationId: "turek",
-      now: mondayOpen,
-      consent: "yes",
-      intent: "hours",
-    });
-    assert.match(result.lines.join(" "), /Turek/);
-    assert.match(result.lines.join(" "), /Sunday closed/);
-    assert.match(result.lines.join(" "), /Łąkowa/);
   });
 });
