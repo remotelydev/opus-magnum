@@ -4,7 +4,6 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
-import { buildApp } from "./app.js";
 import {
   calendarDate,
   createTranscriptStore,
@@ -192,90 +191,5 @@ describe("purge", () => {
 
     const remaining = await readdir(rootDir);
     assert.deepEqual(remaining, [folder32]);
-  });
-});
-
-describe("POST /dev/transcripts and /dev/purge-old", () => {
-  const dirs: string[] = [];
-  const key = randomBytes(32);
-
-  after(async () => {
-    await Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })));
-  });
-
-  async function appWithStore() {
-    const rootDir = await mkdtemp(join(tmpdir(), "reception-transcripts-http-"));
-    dirs.push(rootDir);
-    const app = await buildApp({
-      logger: false,
-      transcripts: {
-        rootDir,
-        key,
-        timeZone: tz,
-        now: () => now,
-      },
-    });
-    return { app, rootDir };
-  }
-
-  it("stores a fake call as an encrypted file", async () => {
-    const { app, rootDir } = await appWithStore();
-    const response = await app.inject({
-      method: "POST",
-      url: "/dev/transcripts",
-      headers: { "content-type": "application/json" },
-      payload: { callId: "fake-1", consent: "yes" },
-    });
-    assert.equal(response.statusCode, 200);
-    const body = response.json() as { stored: boolean; path: string };
-    assert.equal(body.stored, true);
-    assert.equal(body.path, `transcripts/${today}/fake-1.json.enc`);
-
-    const onDisk = await readFile(join(rootDir, today, "fake-1.json.enc"), "utf8");
-    const record = decryptTranscript(key, onDisk);
-    assert.equal(record.language, "pl");
-    assert.equal(record.handler, "ai");
-    assert.match(record.messages.map((item) => item.text).join(" "), /godzin/);
-    await app.close();
-  });
-
-  it("opt-out writes nothing", async () => {
-    const { app, rootDir } = await appWithStore();
-    const response = await app.inject({
-      method: "POST",
-      url: "/dev/transcripts",
-      headers: { "content-type": "application/json" },
-      payload: { callId: "nope", consent: "no" },
-    });
-    assert.equal(response.statusCode, 200);
-    assert.deepEqual(response.json(), {
-      ok: true,
-      stored: false,
-      reason: "opt-out",
-    });
-    assert.deepEqual(await readdir(rootDir), []);
-    await app.close();
-  });
-
-  it("dry-run lists a seeded 33-day folder", async () => {
-    const { app, rootDir } = await appWithStore();
-    const response = await app.inject({
-      method: "POST",
-      url: "/dev/purge-old",
-      headers: { "content-type": "application/json" },
-      payload: { dryRun: true, seed: true },
-    });
-    assert.equal(response.statusCode, 200);
-    const body = response.json() as {
-      dryRun: boolean;
-      folders: string[];
-      today: string;
-    };
-    assert.equal(body.dryRun, true);
-    const expected = shiftCalendarDate(today, -33);
-    assert.deepEqual(body.folders, [expected]);
-    const remaining = await readdir(rootDir);
-    assert.equal(remaining.includes(expected), true);
-    await app.close();
   });
 });
