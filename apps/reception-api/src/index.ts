@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import { findLocation, loadConfig } from "./config.js";
 import { getCachedPricelist } from "./prismic.js";
@@ -10,6 +13,40 @@ import {
   type TranscriptMessage,
   type TranscriptRecord,
 } from "./transcripts.js";
+import {
+  buildDevTicket,
+  formatTicketMessage,
+  resolveWhatsAppEnv,
+  sendWhatsAppText,
+  WhatsAppSendError,
+  type BookingTicket,
+  type DevTicketBody,
+} from "./whatsapp.js";
+
+const localEnvPath = join(dirname(fileURLToPath(import.meta.url)), "../.env");
+if (existsSync(localEnvPath)) {
+  for (const rawLine of readFileSync(localEnvPath, "utf8").split("\n")) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+    const eq = line.indexOf("=");
+    if (eq <= 0) {
+      continue;
+    }
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+}
 
 const config = loadConfig();
 
@@ -27,6 +64,14 @@ const app = Fastify({
 if (!process.env.TRANSCRIPT_KEY) {
   app.log.warn(
     "TRANSCRIPT_KEY missing; POST /dev/transcripts will fail until it is set",
+  );
+}
+
+const whatsappEnv = resolveWhatsAppEnv();
+if (!whatsappEnv.ok) {
+  app.log.warn(
+    { missing: whatsappEnv.missing },
+    "WhatsApp Cloud API env missing; POST /dev/ticket will fail until it is set",
   );
 }
 
@@ -186,6 +231,68 @@ app.post<{ Body: DevPurgeBody }>("/dev/purge-old", async (request) => {
   }
   const result = await store.purgeOld(dryRun);
   return { ok: true, ...result };
+});
+
+app.post<{ Body: DevTicketBody }>("/dev/ticket", async (request, reply) => {
+  const body = request.body ?? {};
+  let ticket: BookingTicket;
+  try {
+    ticket = buildDevTicket(config, body);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "ticket_failed";
+    if (message === "unknown_location") {
+      return reply.code(404).send({
+        error: "unknown_location",
+        id: body.locationId,
+      });
+    }
+    if (message === "invalid_datetime") {
+      return reply.code(400).send({ error: "invalid_datetime" });
+    }
+    requestLog(error);
+    return reply.code(500).send({ error: "ticket_failed" });
+  }
+  const text = formatTicketMessage(ticket);
+  const env = resolveWhatsAppEnv();
+  if (!env.ok) {
+    return reply.code(503).send({
+      error: "missing_whatsapp_env",
+      missing: env.missing,
+      sent: false,
+      ticket,
+      text,
+    });
+  }
+  try {
+    const sent = await sendWhatsAppText({
+      token: env.config.token,
+      phoneNumberId: env.config.phoneNumberId,
+      to: env.config.to,
+      graphVersion: env.config.graphVersion,
+      body: text,
+    });
+    return {
+      ok: true,
+      sent: true,
+      to: env.config.to,
+      messageId: sent.messageId,
+      ticket,
+      text,
+    };
+  } catch (error) {
+    if (error instanceof WhatsAppSendError) {
+      return reply.code(502).send({
+        error: "whatsapp_send_failed",
+        status: error.status,
+        details: error.details,
+        sent: false,
+        ticket,
+        text,
+      });
+    }
+    requestLog(error);
+    return reply.code(502).send({ error: "whatsapp_send_failed", sent: false });
+  }
 });
 
 function requestLog(error: unknown) {

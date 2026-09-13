@@ -1,6 +1,6 @@
 # reception-api
 
-Dental clinic AI receptionist backend (step 5: public URL).
+Dental clinic AI receptionist backend (step 6: WhatsApp ticket out).
 
 ```bash
 pnpm install
@@ -28,7 +28,7 @@ Override bind with `HOST` and `PORT`, or `CONFIG_PATH` for another JSON file. `T
 
 ## Public URL
 
-The API stays on `127.0.0.1:8788`. Cloudflare Tunnel puts HTTPS in front so Meta/Telnyx can POST later. This step is only the tunnel — no WhatsApp or Telnyx webhooks yet.
+The API stays on `127.0.0.1:8788`. Cloudflare Tunnel puts HTTPS in front so Meta/Telnyx can POST inbound webhooks later. Outbound WhatsApp tickets (this step) do not need a tunnel.
 
 Install `cloudflared` once on the Mac mini:
 
@@ -81,6 +81,54 @@ curl https://reception.example.com/health
 
 Do not run `brew services start cloudflared` — that fights this script.
 
+## WhatsApp ticket (outbound)
+
+`POST /dev/ticket` sends a Polish booking ticket to **Bartosz’s WhatsApp** via Meta Cloud API. Destination is `WHATSAPP_TO`, not a clinic Business number. Product copy is Polish only.
+
+A public tunnel is **not** required. Env only: token, Phone number ID, destination.
+
+### Meta app / test number
+
+1. Open [Meta for Developers](https://developers.facebook.com/apps/) → **Create app** (Business) or pick an existing app.
+2. **Add product** → **WhatsApp**.
+3. WhatsApp → **API Setup**. Copy **Phone number ID** (the Meta **test** number, not a clinic line).
+4. Copy a token: the dashboard **temporary** token expires in ~24h. For a longer test, Business Manager → **System Users** → generate a token with `whatsapp_business_messaging` (and `whatsapp_business_management` if the UI asks). Never commit it.
+5. Under **To**, add Bartosz’s personal WhatsApp to the allowlist (test numbers only send to listed numbers).
+6. Send Meta’s dashboard test once (`hello_world`) **or** message the test number from that WhatsApp, so a 24-hour customer-care window is open. Free-form ticket text only works inside that window.
+7. No webhook / callback URL for this step.
+
+Copy the env example if `.env` does not exist yet:
+
+```bash
+cp apps/reception-api/.env.example apps/reception-api/.env
+```
+
+Edit `apps/reception-api/.env` (gitignored). Set:
+
+- `WHATSAPP_TOKEN=` — access token
+- `WHATSAPP_PHONE_NUMBER_ID=` — test Phone number ID (digits)
+- `WHATSAPP_TO=` — Bartosz’s number with country code, e.g. `+48500111222`
+
+The API loads `apps/reception-api/.env` on start (does not override vars already in the shell). Restart `dev` after editing `.env`.
+
+Without credentials, the send path still builds the fixture and fails clearly. Terminal 1:
+
+```bash
+pnpm --filter reception-api dev
+```
+
+Terminal 2 — fixture ticket, no Meta call:
+
+```bash
+curl -sS -i -X POST http://127.0.0.1:8788/dev/ticket \
+  -H 'content-type: application/json' \
+  -d '{}'
+```
+
+Expect HTTP 503 and JSON with `"error":"missing_whatsapp_env"`, `"missing":["WHATSAPP_TOKEN","WHATSAPP_PHONE_NUMBER_ID","WHATSAPP_TO"]`, plus `ticket` and `text` matching the fixture (Turek, Jan Kowalski, `wtorek rano`, `Pacjent: nowy`, and the other Polish labels).
+
+After filling `.env` and restarting `dev`, the same curl should return `"sent":true` and a `messageId`. The structured message should appear on Bartosz’s WhatsApp. Optional Graph version: `WHATSAPP_GRAPH_VERSION` (default `v22.0`).
+
 ## Transcripts
 
 Encrypted JSON only (AES-256-GCM). No audio files. Layout under this app:
@@ -113,4 +161,4 @@ curl -s -X POST http://127.0.0.1:8788/dev/purge-old \
 pnpm --filter reception-api test
 ```
 
-Script fixtures: `src/script.test.ts`. Transcript store / purge / opt-out: `src/transcripts.test.ts`.
+Script fixtures: `src/script.test.ts`. Transcript store / purge / opt-out: `src/transcripts.test.ts`. WhatsApp ticket fixture / Cloud API send: `src/whatsapp.test.ts`.
