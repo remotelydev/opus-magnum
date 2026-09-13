@@ -1,15 +1,96 @@
 import Fastify from "fastify";
 import { findLocation, loadConfig } from "./config.js";
 import { getCachedPricelist } from "./prismic.js";
+import {
+  createTranscriptStore,
+  RETENTION_DAYS,
+  safeCallId,
+  type Consent,
+  type HandlerKind,
+  type TranscriptMessage,
+  type TranscriptRecord,
+} from "./transcripts.js";
 
 const config = loadConfig();
 
 const host = process.env.HOST ?? config.server.host;
 const port = Number(process.env.PORT ?? config.server.port);
 
+const store = createTranscriptStore({
+  timeZone: config.timezone,
+});
+
 const app = Fastify({
   logger: true,
 });
+
+if (!process.env.TRANSCRIPT_KEY) {
+  app.log.warn(
+    "TRANSCRIPT_KEY missing; POST /dev/transcripts will fail until it is set",
+  );
+}
+
+interface DevTranscriptBody {
+  callId?: string;
+  consent?: Consent;
+  transcribe?: boolean;
+  startedAt?: string;
+  endedAt?: string;
+  handler?: HandlerKind;
+  outcome?: string;
+  messages?: TranscriptMessage[];
+}
+
+interface DevPurgeBody {
+  dryRun?: boolean;
+  seed?: boolean;
+}
+
+const FAKE_MESSAGES: TranscriptMessage[] = [
+  {
+    role: "agent",
+    text: "DentaPlus+ Turek. Rozmowa może być nagrywana na potrzeby jakości obsługi.",
+  },
+  { role: "caller", text: "Chciałem zapytać o godziny otwarcia." },
+  {
+    role: "agent",
+    text: "Poniedziałek–piątek 08:00–20:00, sobota 10:00–15:00, niedziela nieczynne.",
+  },
+];
+
+function parseIso(value: string | undefined, fallback: Date): Date {
+  if (!value) {
+    return fallback;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error("invalid_datetime");
+  }
+  return parsed;
+}
+
+function fakeRecord(body: DevTranscriptBody, clock: Date): TranscriptRecord {
+  const endedAt = parseIso(body.endedAt, clock);
+  const startedAt = parseIso(
+    body.startedAt,
+    new Date(endedAt.getTime() - 45_000),
+  );
+  const durationSeconds = Math.max(
+    0,
+    Math.round((endedAt.getTime() - startedAt.getTime()) / 1000),
+  );
+  return {
+    callId: safeCallId(body.callId),
+    startedAt: startedAt.toISOString(),
+    endedAt: endedAt.toISOString(),
+    durationSeconds,
+    handler: body.handler === "human" ? "human" : "ai",
+    transcriptOk: true,
+    language: "pl",
+    outcome: body.outcome ?? "dev_fake",
+    messages: body.messages ?? FAKE_MESSAGES,
+  };
+}
 
 app.get("/health", async () => {
   return { ok: true, service: "reception-api" };
@@ -65,6 +146,46 @@ app.get<{ Params: { id: string } }>("/config/:id", async (request, reply) => {
       pricelistError: "prismic_unavailable",
     });
   }
+});
+
+app.post<{ Body: DevTranscriptBody }>("/dev/transcripts", async (request, reply) => {
+  const body = request.body ?? {};
+  try {
+    const result = await store.write({
+      consent: body.consent,
+      transcribe: body.transcribe,
+      record: fakeRecord(body, new Date()),
+    });
+    if (!result.stored) {
+      return { ok: true, stored: false, reason: result.reason };
+    }
+    return {
+      ok: true,
+      stored: true,
+      path: `transcripts/${result.relativePath}`,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "transcript_write_failed";
+    if (message === "missing_transcript_key" || message.startsWith("TRANSCRIPT_KEY")) {
+      return reply.code(500).send({ error: "missing_transcript_key" });
+    }
+    if (message === "invalid_datetime") {
+      return reply.code(400).send({ error: "invalid_datetime" });
+    }
+    requestLog(error);
+    return reply.code(500).send({ error: "transcript_write_failed" });
+  }
+});
+
+app.post<{ Body: DevPurgeBody }>("/dev/purge-old", async (request) => {
+  const body = request.body ?? {};
+  const dryRun = body.dryRun !== false;
+  const seed = body.seed ?? dryRun;
+  if (seed) {
+    await store.seedOldFolder(RETENTION_DAYS + 1);
+  }
+  const result = await store.purgeOld(dryRun);
+  return { ok: true, ...result };
 });
 
 function requestLog(error: unknown) {
