@@ -96,7 +96,7 @@ A public tunnel is **not** required. Env only: token, Phone number ID, destinati
 3. WhatsApp → **API Setup**. Copy **Phone number ID** (the Meta **test** number, not a clinic line).
 4. Copy a token: the dashboard **temporary** token expires in ~24h. For a longer test, Business Manager → **System Users** → generate a token with `whatsapp_business_messaging` (and `whatsapp_business_management` if the UI asks). Never commit it.
 5. Under **To**, add Bartosz’s personal WhatsApp to the allowlist (test numbers only send to listed numbers).
-6. Send Meta’s dashboard test once (`hello_world`) **or** message the test number from that WhatsApp, so a 24-hour customer-care window is open. Free-form ticket text only works inside that window.
+6. From that WhatsApp, send any message to the test number. That opens a 24-hour customer-service window, and the ticket (free-form text, not a template) is only delivered inside it. Sending the dashboard `hello_world` template does **not** open the window; only a message from you does.
 7. No webhook / callback URL for this step.
 
 Copy the env example if `.env` does not exist yet:
