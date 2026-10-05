@@ -1,5 +1,4 @@
 import { findLocation, type AppConfig } from "./config.js";
-import { isOpenAt } from "./script.js";
 
 export const WHATSAPP_ENV_KEYS = [
   "WHATSAPP_TOKEN",
@@ -9,68 +8,50 @@ export const WHATSAPP_ENV_KEYS = [
 
 export const DEFAULT_GRAPH_VERSION = "v22.0";
 
-export type TicketHandler = "ai" | "human";
-export type TicketUrgency = "normal" | "urgent";
+/** Closed list, so no free text can reach Meta through this field. */
+export const TICKET_CATEGORIES = ["book", "callback", "other"] as const;
+export type TicketCategory = (typeof TICKET_CATEGORIES)[number];
 
+const SLOT_MAX_LENGTH = 40;
+const NAME_MAX_LENGTH = 80;
+
+/**
+ * Minimal booking ticket. It must never carry a transcript, symptoms,
+ * or a free-text visit reason: only these fields go to Meta.
+ */
 export interface BookingTicket {
   locationId: string;
-  locationName: string;
-  time: string;
-  timeZone: string;
-  open: boolean;
-  handler: TicketHandler;
-  transcriptOk: boolean;
+  site: string;
+  receivedAt: string;
   name: string;
   phone: string;
-  intent: string;
-  slotWish: string;
-  urgency: TicketUrgency;
+  category: TicketCategory;
+  slot: string;
+  urgent: boolean;
   returning: boolean | null;
-  summary: string;
 }
 
 export interface DevTicketBody {
   locationId?: string;
   time?: string;
-  open?: boolean;
-  handler?: TicketHandler;
-  transcriptOk?: boolean;
   name?: string;
   phone?: string;
-  intent?: string;
-  slotWish?: string;
-  urgency?: TicketUrgency;
+  category?: string;
+  slot?: string;
+  urgent?: boolean;
   returning?: boolean | null;
-  summary?: string;
 }
 
-/** Fixture booking ticket for POST /dev/ticket (patient fields; destination is WHATSAPP_TO). */
-export const DEV_TICKET_FIXTURE: Required<
-  Pick<
-    DevTicketBody,
-    | "locationId"
-    | "handler"
-    | "transcriptOk"
-    | "name"
-    | "phone"
-    | "intent"
-    | "slotWish"
-    | "urgency"
-    | "returning"
-    | "summary"
-  >
-> = {
+/** Fixture booking ticket for POST /dev/ticket (sample patient; destination is WHATSAPP_TO). */
+export const DEV_TICKET_FIXTURE = {
   locationId: "turek",
-  handler: "ai",
-  transcriptOk: true,
   name: "Jan Kowalski",
   phone: "+48555111222",
-  intent: "book",
-  slotWish: "wtorek rano",
-  urgency: "normal",
+  category: "book",
+  slot: "wtorek rano",
+  urgent: false,
   returning: false,
-  summary: "Kontrola — prośba o wizytę",
-};
+} as const satisfies Required<Omit<DevTicketBody, "time">>;
 
 export interface WhatsAppEnv {
   token: string;
@@ -137,7 +118,6 @@ export function resolveWhatsAppEnv(
 export function formatTicketTime(now: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone,
-    year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -146,47 +126,44 @@ export function formatTicketTime(now: Date, timeZone: string): string {
   }).formatToParts(now);
   const get = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((part) => part.type === type)?.value ?? "";
-  return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}`;
+  return `${get("day")}.${get("month")} ${get("hour")}:${get("minute")}`;
 }
 
-const INTENT_PL: Record<string, string> = {
+const CATEGORY_PL: Record<TicketCategory, string> = {
   book: "wizyta",
-  emergency: "pilne",
-  human: "połączenie z recepcją",
-  hours: "godziny",
+  callback: "oddzwonić",
   other: "inne",
 };
 
-function intentLabel(intent: string): string {
-  return INTENT_PL[intent] ?? intent;
+function isCategory(value: string): value is TicketCategory {
+  return (TICKET_CATEGORIES as readonly string[]).includes(value);
 }
 
-function returningLabel(returning: boolean | null): string {
-  if (returning === true) {
-    return "powracający";
-  }
-  if (returning === false) {
-    return "nowy";
-  }
-  return "nie podano";
+function siteLabel(config: AppConfig, locationName: string): string {
+  return locationName.replace(config.brand, "").trim() || locationName;
 }
 
+/** One line, e.g. `PILNE · Turek · wizyta · nowy · wtorek rano · Jan Kowalski · +48555111222 · 14.09 10:00`. */
 export function formatTicketMessage(ticket: BookingTicket): string {
-  return [
-    `Zgłoszenie — ${ticket.locationName}`,
-    "",
-    `Czas: ${ticket.time} (${ticket.timeZone})`,
-    `Godziny: ${ticket.open ? "otwarte" : "nieczynne"}`,
-    `Obsługa: ${ticket.handler === "human" ? "człowiek" : "AI"}`,
-    `Transkrypcja: ${ticket.transcriptOk ? "tak" : "nie"}`,
-    `Imię i nazwisko: ${ticket.name}`,
-    `Telefon: ${ticket.phone}`,
-    `Zamiar: ${intentLabel(ticket.intent)}`,
-    `Termin: ${ticket.slotWish}`,
-    `Pilność: ${ticket.urgency === "urgent" ? "pilne" : "zwykła"}`,
-    `Pacjent: ${returningLabel(ticket.returning)}`,
-    `Opis: ${ticket.summary}`,
-  ].join("\n");
+  const parts = [
+    ticket.urgent ? "PILNE" : null,
+    ticket.site,
+    CATEGORY_PL[ticket.category],
+    ticket.returning === null ? null : ticket.returning ? "powracający" : "nowy",
+    ticket.slot,
+    ticket.name,
+    ticket.phone,
+    ticket.receivedAt,
+  ];
+  return parts.filter((part): part is string => part !== null).join(" · ");
+}
+
+function oneLine(value: string, max: number, error: string): string {
+  const text = value.replace(/\s+/g, " ").trim();
+  if (!text || text.length > max) {
+    throw new Error(error);
+  }
+  return text;
 }
 
 export function buildDevTicket(
@@ -203,22 +180,24 @@ export function buildDevTicket(
   if (Number.isNaN(at.getTime())) {
     throw new Error("invalid_datetime");
   }
-  const open = body.open ?? isOpenAt(location.hours, at, config.timezone);
+  const category = body.category ?? DEV_TICKET_FIXTURE.category;
+  if (!isCategory(category)) {
+    throw new Error("invalid_category");
+  }
+  const phone = (body.phone ?? DEV_TICKET_FIXTURE.phone).replace(/[\s-]/g, "");
+  if (!/^\+?\d{9,15}$/.test(phone)) {
+    throw new Error("invalid_phone");
+  }
   return {
     locationId: location.id,
-    locationName: location.name,
-    time: formatTicketTime(at, config.timezone),
-    timeZone: config.timezone,
-    open,
-    handler: body.handler === "human" ? "human" : DEV_TICKET_FIXTURE.handler,
-    transcriptOk: body.transcriptOk ?? DEV_TICKET_FIXTURE.transcriptOk,
-    name: body.name ?? DEV_TICKET_FIXTURE.name,
-    phone: body.phone ?? DEV_TICKET_FIXTURE.phone,
-    intent: body.intent ?? DEV_TICKET_FIXTURE.intent,
-    slotWish: body.slotWish ?? DEV_TICKET_FIXTURE.slotWish,
-    urgency: body.urgency === "urgent" ? "urgent" : DEV_TICKET_FIXTURE.urgency,
+    site: siteLabel(config, location.name),
+    receivedAt: formatTicketTime(at, config.timezone),
+    name: oneLine(body.name ?? DEV_TICKET_FIXTURE.name, NAME_MAX_LENGTH, "invalid_name"),
+    phone,
+    category,
+    slot: oneLine(body.slot ?? DEV_TICKET_FIXTURE.slot, SLOT_MAX_LENGTH, "invalid_slot"),
+    urgent: body.urgent === true,
     returning: body.returning === undefined ? DEV_TICKET_FIXTURE.returning : body.returning,
-    summary: body.summary ?? DEV_TICKET_FIXTURE.summary,
   };
 }
 

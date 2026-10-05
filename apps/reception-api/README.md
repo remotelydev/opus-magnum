@@ -28,7 +28,7 @@ Override bind with `HOST` and `PORT`, or `CONFIG_PATH` for another JSON file. `T
 
 ## Public URL
 
-The API stays on `127.0.0.1:8788`. Cloudflare Tunnel puts HTTPS in front so Meta/Telnyx can POST inbound webhooks later. Outbound WhatsApp tickets (this step) do not need a tunnel.
+The API stays on `127.0.0.1:8788`. Cloudflare Tunnel puts HTTPS in front so Meta, SMSAPI and ElevenLabs can POST inbound webhooks later. Outbound WhatsApp tickets (this step) do not need a tunnel.
 
 Install `cloudflared` once on the Mac mini:
 
@@ -85,6 +85,8 @@ Do not run `brew services start cloudflared` — that fights this script.
 
 `POST /dev/ticket` sends a Polish booking ticket to **Bartosz’s WhatsApp** via Meta Cloud API. Destination is `WHATSAPP_TO`, not a clinic Business number. Product copy is Polish only.
 
+The ticket is one line with minimal fields only: `PILNE` (when urgent), site, category (`wizyta`, `oddzwonić`, `inne`), new/returning, preferred slot, name, phone, time received. It never carries a transcript, symptoms or a free-text reason; any other body field is ignored. Optional body fields: `locationId`, `time`, `name`, `phone`, `category` (`book`, `callback`, `other`), `slot` (max 40 chars), `urgent`, `returning`.
+
 A public tunnel is **not** required. Env only: token, Phone number ID, destination.
 
 ### Meta app / test number
@@ -125,7 +127,7 @@ curl -sS -i -X POST http://127.0.0.1:8788/dev/ticket \
   -d '{}'
 ```
 
-Expect HTTP 503 and JSON with `"error":"missing_whatsapp_env"`, `"missing":["WHATSAPP_TOKEN","WHATSAPP_PHONE_NUMBER_ID","WHATSAPP_TO"]`, plus `ticket` and `text` matching the fixture (Turek, Jan Kowalski, `wtorek rano`, `Pacjent: nowy`, and the other Polish labels).
+Expect HTTP 503 and JSON with `"error":"missing_whatsapp_env"`, `"missing":["WHATSAPP_TOKEN","WHATSAPP_PHONE_NUMBER_ID","WHATSAPP_TO"]`, plus `ticket` and `text` matching the fixture, e.g. `Turek · wizyta · nowy · wtorek rano · Jan Kowalski · +48555111222 · 05.10 14:21`.
 
 After filling `.env` and restarting `dev`, the same curl should return `"sent":true` and a `messageId`. The structured message should appear on Bartosz’s WhatsApp. Optional Graph version: `WHATSAPP_GRAPH_VERSION` (default `v22.0`).
 

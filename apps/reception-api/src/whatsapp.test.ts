@@ -9,6 +9,7 @@ import {
   resolveWhatsAppEnv,
   sendWhatsAppText,
   WhatsAppSendError,
+  type DevTicketBody,
 } from "./whatsapp.js";
 
 const config = loadConfig();
@@ -62,66 +63,92 @@ describe("resolveWhatsAppEnv", () => {
   });
 });
 
-describe("booking ticket fixture", () => {
-  it("formats every locked field in Polish", () => {
+describe("booking ticket", () => {
+  it("formats the fixture as one minimal Polish line", () => {
     const ticket = buildDevTicket(config, {}, mondayOpen);
-    assert.equal(ticket.locationId, "turek");
-    assert.equal(ticket.locationName, "DentaPlus+ Turek");
-    assert.equal(ticket.time, "2026-09-14 10:00");
-    assert.equal(ticket.timeZone, "Europe/Warsaw");
-    assert.equal(ticket.open, true);
-    assert.equal(ticket.handler, "ai");
-    assert.equal(ticket.transcriptOk, true);
-    assert.equal(ticket.name, DEV_TICKET_FIXTURE.name);
-    assert.equal(ticket.phone, DEV_TICKET_FIXTURE.phone);
-    assert.equal(ticket.intent, "book");
-    assert.equal(ticket.slotWish, "wtorek rano");
-    assert.equal(ticket.urgency, "normal");
-    assert.equal(ticket.returning, false);
-    assert.equal(ticket.summary, DEV_TICKET_FIXTURE.summary);
-
-    const text = formatTicketMessage(ticket);
-    assert.match(text, /^Zgłoszenie — DentaPlus\+ Turek/m);
-    assert.match(text, /Czas: 2026-09-14 10:00 \(Europe\/Warsaw\)/);
-    assert.match(text, /Godziny: otwarte/);
-    assert.match(text, /Obsługa: AI/);
-    assert.match(text, /Transkrypcja: tak/);
-    assert.match(text, /Imię i nazwisko: Jan Kowalski/);
-    assert.match(text, /Telefon: \+48555111222/);
-    assert.match(text, /Zamiar: wizyta/);
-    assert.match(text, /Termin: wtorek rano/);
-    assert.match(text, /Pilność: zwykła/);
-    assert.match(text, /Pacjent: nowy/);
-    assert.match(text, /Opis: Kontrola — prośba o wizytę/);
+    assert.deepEqual(ticket, {
+      locationId: "turek",
+      site: "Turek",
+      receivedAt: "14.09 10:00",
+      name: DEV_TICKET_FIXTURE.name,
+      phone: DEV_TICKET_FIXTURE.phone,
+      category: "book",
+      slot: "wtorek rano",
+      urgent: false,
+      returning: false,
+    });
+    assert.equal(
+      formatTicketMessage(ticket),
+      "Turek · wizyta · nowy · wtorek rano · Jan Kowalski · +48555111222 · 14.09 10:00",
+    );
   });
 
-  it("marks closed hours and returning patients when overridden", () => {
+  it("puts PILNE first and marks returning patients", () => {
     const ticket = buildDevTicket(
       config,
       {
         locationId: "poddebice",
-        handler: "human",
-        transcriptOk: false,
-        urgency: "urgent",
-        intent: "emergency",
+        category: "callback",
+        urgent: true,
         returning: true,
         name: "Anna Nowak",
-        phone: "+48600111222",
-        slotWish: "jak najszybciej",
-        summary: "Ból zęba",
+        phone: "+48 600-111-222",
+        slot: "jak najszybciej",
       },
       sundayClosed,
     );
-    assert.equal(ticket.open, false);
-    assert.equal(ticket.locationName, "DentaPlus+ Poddębice");
+    assert.equal(
+      formatTicketMessage(ticket),
+      "PILNE · Poddębice · oddzwonić · powracający · jak najszybciej · Anna Nowak · +48600111222 · 13.09 12:00",
+    );
+  });
+
+  it("leaves out new/returning when the caller did not say", () => {
+    const ticket = buildDevTicket(config, { returning: null }, mondayOpen);
+    assert.doesNotMatch(formatTicketMessage(ticket), /nowy|powracający/);
+  });
+
+  it("never carries a free-text reason, even if one is posted", () => {
+    const body = {
+      summary: "Ból zęba po zabiegu",
+      reason: "krwawienie",
+      transcript: "pełna rozmowa",
+    } as DevTicketBody;
+    const ticket = buildDevTicket(config, body, mondayOpen);
     const text = formatTicketMessage(ticket);
-    assert.match(text, /Godziny: nieczynne/);
-    assert.match(text, /Obsługa: człowiek/);
-    assert.match(text, /Transkrypcja: nie/);
-    assert.match(text, /Zamiar: pilne/);
-    assert.match(text, /Pilność: pilne/);
-    assert.match(text, /Pacjent: powracający/);
-    assert.match(text, /Anna Nowak/);
+    assert.doesNotMatch(text, /Ból|krwawienie|rozmowa/);
+    assert.deepEqual(Object.keys(ticket).sort(), [
+      "category",
+      "locationId",
+      "name",
+      "phone",
+      "receivedAt",
+      "returning",
+      "site",
+      "slot",
+      "urgent",
+    ]);
+  });
+
+  it("rejects a category outside the closed list", () => {
+    assert.throws(
+      () => buildDevTicket(config, { category: "ból zęba" }, mondayOpen),
+      /invalid_category/,
+    );
+  });
+
+  it("rejects a bad phone, an empty name, and a long slot", () => {
+    assert.throws(() => buildDevTicket(config, { phone: "abc" }, mondayOpen), /invalid_phone/);
+    assert.throws(() => buildDevTicket(config, { name: "  " }, mondayOpen), /invalid_name/);
+    assert.throws(
+      () => buildDevTicket(config, { slot: "x".repeat(41) }, mondayOpen),
+      /invalid_slot/,
+    );
+  });
+
+  it("keeps the ticket on one line", () => {
+    const ticket = buildDevTicket(config, { name: "Jan\nKowalski", slot: "wtorek\nrano" }, mondayOpen);
+    assert.doesNotMatch(formatTicketMessage(ticket), /\n/);
   });
 });
 
@@ -140,7 +167,7 @@ describe("sendWhatsAppText", () => {
       token: "EAA.secret",
       phoneNumberId: "106540352242922",
       to: "+48500111222",
-      body: "Zgłoszenie — test",
+      body: "Turek · wizyta · test",
       fetchImpl,
     });
 
@@ -161,7 +188,7 @@ describe("sendWhatsAppText", () => {
     assert.equal(payload.messaging_product, "whatsapp");
     assert.equal(payload.to, "+48500111222");
     assert.equal(payload.type, "text");
-    assert.equal(payload.text.body, "Zgłoszenie — test");
+    assert.equal(payload.text.body, "Turek · wizyta · test");
   });
 
   it("surfaces Graph API errors without using a real token", async () => {

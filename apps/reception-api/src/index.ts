@@ -233,6 +233,14 @@ app.post<{ Body: DevPurgeBody }>("/dev/purge-old", async (request) => {
   return { ok: true, ...result };
 });
 
+const TICKET_INPUT_ERRORS = new Set([
+  "invalid_datetime",
+  "invalid_category",
+  "invalid_phone",
+  "invalid_name",
+  "invalid_slot",
+]);
+
 app.post<{ Body: DevTicketBody }>("/dev/ticket", async (request, reply) => {
   const body = request.body ?? {};
   let ticket: BookingTicket;
@@ -246,8 +254,8 @@ app.post<{ Body: DevTicketBody }>("/dev/ticket", async (request, reply) => {
         id: body.locationId,
       });
     }
-    if (message === "invalid_datetime") {
-      return reply.code(400).send({ error: "invalid_datetime" });
+    if (TICKET_INPUT_ERRORS.has(message)) {
+      return reply.code(400).send({ error: message });
     }
     requestLog(error);
     return reply.code(500).send({ error: "ticket_failed" });
