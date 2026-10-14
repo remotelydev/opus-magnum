@@ -154,7 +154,22 @@ Setup:
 1. Run the **named** tunnel (see above); a quick tunnel URL changes on restart.
 2. In `.env`: `WHATSAPP_APP_SECRET` (Meta app → App settings → Basic → App secret) and `WHATSAPP_VERIFY_TOKEN` (any random string, e.g. `openssl rand -hex 16`). Restart `dev`.
 3. Meta app → WhatsApp → Configuration → Webhook: Callback URL `https://<your tunnel host>/webhooks/whatsapp`, Verify token = the same string → **Verify and save**. Then subscribe to the `messages` field.
-4. `POST /dev/ticket`, reply `OK <date> <time>` to the ticket on WhatsApp, and watch the `dev` log for `staff reply handled`.
+4. Subscribe the app to the WhatsApp Business Account once (without this Meta sends nothing, not even the dashboard **Test**). The WABA ID is on WhatsApp → API Setup, under the test number ("WhatsApp Business Account ID", not the Phone number ID). From the repo root:
+
+   ```bash
+   set -a; source apps/reception-api/.env; set +a
+   ```
+
+   ```bash
+   WABA_ID=<WhatsApp Business Account ID>
+   ```
+
+   ```bash
+   curl -X POST "https://graph.facebook.com/v22.0/$WABA_ID/subscribed_apps" -H "Authorization: Bearer $WHATSAPP_TOKEN"
+   ```
+
+   Expect `{"success":true}`.
+5. `POST /dev/ticket`, reply `OK <date> <time>` to the ticket on WhatsApp, and watch the `dev` log for `staff reply handled`.
 
 Check the verify handshake locally:
 
