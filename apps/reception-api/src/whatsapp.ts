@@ -1,4 +1,5 @@
 import { findLocation, type AppConfig } from "./config.js";
+import { ticketLabel } from "./tickets.js";
 
 export const WHATSAPP_ENV_KEYS = [
   "WHATSAPP_TOKEN",
@@ -143,9 +144,10 @@ function siteLabel(config: AppConfig, locationName: string): string {
   return locationName.replace(config.brand, "").trim() || locationName;
 }
 
-/** One line, e.g. `PILNE · Turek · wizyta · nowy · wtorek rano · Jan Kowalski · +48555111222 · 14.09 10:00`. */
-export function formatTicketMessage(ticket: BookingTicket): string {
+/** One line, e.g. `#T-0412 · PILNE · Turek · wizyta · nowy · wtorek rano · Jan Kowalski · +48555111222 · 14.09 10:00`. */
+export function formatTicketMessage(ticket: BookingTicket, number?: number): string {
   const parts = [
+    number === undefined ? null : ticketLabel(number),
     ticket.urgent ? "PILNE" : null,
     ticket.site,
     CATEGORY_PL[ticket.category],

@@ -33,6 +33,9 @@ next-env.d.ts
 # reception-api local encrypted transcripts (never commit)
 apps/reception-api/transcripts/
 
+# reception-api ticket store (patient phone numbers, never commit)
+apps/reception-api/data/
+
 # cloudflared credentials / local config (never commit tokens)
 .cloudflared/
 apps/reception-api/.cloudflared/

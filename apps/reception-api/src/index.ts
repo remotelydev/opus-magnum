@@ -13,6 +13,15 @@ import {
   type TranscriptMessage,
   type TranscriptRecord,
 } from "./transcripts.js";
+import { createTicketStore } from "./tickets.js";
+import { resolveSmsApiEnv, sendSms } from "./smsapi.js";
+import {
+  extractTextMessages,
+  handleStaffMessage,
+  isValidSignature,
+  resolveWebhookEnv,
+  verifySubscription,
+} from "./webhook.js";
 import {
   buildDevTicket,
   formatTicketMessage,
@@ -57,6 +66,8 @@ const store = createTranscriptStore({
   timeZone: config.timezone,
 });
 
+const tickets = createTicketStore();
+
 const app = Fastify({
   logger: true,
 });
@@ -73,6 +84,17 @@ if (!whatsappEnv.ok) {
     { missing: whatsappEnv.missing },
     "WhatsApp Cloud API env missing; POST /dev/ticket will fail until it is set",
   );
+}
+
+const webhookEnv = resolveWebhookEnv();
+if (!webhookEnv.ok) {
+  app.log.warn(
+    { missing: webhookEnv.missing },
+    "WhatsApp webhook env missing; /webhooks/whatsapp will refuse requests until it is set",
+  );
+}
+if (!resolveSmsApiEnv()) {
+  app.log.warn("SMSAPI_TOKEN missing; confirmation SMS will be logged, not sent");
 }
 
 interface DevTranscriptBody {
@@ -260,9 +282,9 @@ app.post<{ Body: DevTicketBody }>("/dev/ticket", async (request, reply) => {
     requestLog(error);
     return reply.code(500).send({ error: "ticket_failed" });
   }
-  const text = formatTicketMessage(ticket);
   const env = resolveWhatsAppEnv();
   if (!env.ok) {
+    const text = formatTicketMessage(ticket);
     return reply.code(503).send({
       error: "missing_whatsapp_env",
       missing: env.missing,
@@ -271,6 +293,8 @@ app.post<{ Body: DevTicketBody }>("/dev/ticket", async (request, reply) => {
       text,
     });
   }
+  const number = await tickets.nextNumber();
+  const text = formatTicketMessage(ticket, number);
   try {
     const sent = await sendWhatsAppText({
       token: env.config.token,
@@ -279,11 +303,19 @@ app.post<{ Body: DevTicketBody }>("/dev/ticket", async (request, reply) => {
       graphVersion: env.config.graphVersion,
       body: text,
     });
+    await tickets.save({
+      number,
+      messageId: sent.messageId,
+      phone: ticket.phone,
+      locationId: ticket.locationId,
+      createdAt: new Date().toISOString(),
+    });
     return {
       ok: true,
       sent: true,
       to: env.config.to,
       messageId: sent.messageId,
+      number,
       ticket,
       text,
     };
@@ -301,6 +333,87 @@ app.post<{ Body: DevTicketBody }>("/dev/ticket", async (request, reply) => {
     requestLog(error);
     return reply.code(502).send({ error: "whatsapp_send_failed", sent: false });
   }
+});
+
+app.get<{ Querystring: Record<string, string | undefined> }>(
+  "/webhooks/whatsapp",
+  async (request, reply) => {
+    const env = resolveWebhookEnv();
+    if (!env.ok) {
+      return reply.code(503).send({ error: "missing_webhook_env", missing: env.missing });
+    }
+    const challenge = verifySubscription(request.query, env.config.verifyToken);
+    if (challenge === null) {
+      return reply.code(403).send({ error: "verification_failed" });
+    }
+    return reply.type("text/plain").send(challenge);
+  },
+);
+
+// Own scope: the signature is over the raw bytes, so this route parses JSON itself.
+await app.register(async (scope) => {
+  scope.addContentTypeParser(
+    "application/json",
+    { parseAs: "buffer" },
+    (_request, body, done) => done(null, body),
+  );
+
+  scope.post<{ Body: Buffer }>("/webhooks/whatsapp", async (request, reply) => {
+    const env = resolveWebhookEnv();
+    if (!env.ok) {
+      return reply.code(503).send({ error: "missing_webhook_env", missing: env.missing });
+    }
+    const signature = request.headers["x-hub-signature-256"];
+    if (
+      !Buffer.isBuffer(request.body) ||
+      !isValidSignature(request.body, typeof signature === "string" ? signature : undefined, env.config.appSecret)
+    ) {
+      return reply.code(401).send({ error: "invalid_signature" });
+    }
+    let payload: unknown;
+    try {
+      payload = JSON.parse(request.body.toString("utf8"));
+    } catch {
+      return reply.code(400).send({ error: "invalid_json" });
+    }
+    const whatsapp = resolveWhatsAppEnv();
+    if (!whatsapp.ok) {
+      app.log.error({ missing: whatsapp.missing }, "webhook received but WhatsApp env missing");
+      return { ok: true };
+    }
+    const wa = whatsapp.config;
+    for (const message of extractTextMessages(payload)) {
+      try {
+        const outcome = await handleStaffMessage(message, {
+          config,
+          store: tickets,
+          staffNumber: wa.to,
+          replyToStaff: async (text) => {
+            await sendWhatsAppText({
+              token: wa.token,
+              phoneNumberId: wa.phoneNumberId,
+              to: wa.to,
+              graphVersion: wa.graphVersion,
+              body: text,
+            });
+          },
+          sendSms: (to, text) =>
+            sendSms({
+              env: resolveSmsApiEnv(),
+              to,
+              message: text,
+              log: (line) => app.log.warn(line),
+            }),
+          onError: requestLog,
+        });
+        app.log.info({ messageId: message.id, outcome }, "staff reply handled");
+      } catch (error) {
+        // Meta retries non-200s for days; one bad message must not block the rest.
+        requestLog(error);
+      }
+    }
+    return { ok: true };
+  });
 });
 
 function requestLog(error: unknown) {
