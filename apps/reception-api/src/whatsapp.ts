@@ -59,6 +59,9 @@ export interface WhatsAppEnv {
   phoneNumberId: string;
   to: string;
   graphVersion: string;
+  /** Approved template for tickets (`nowe_zgloszenie`); without it tickets go as plain text. */
+  ticketTemplate: string | undefined;
+  templateLanguage: string;
 }
 
 export type WhatsAppEnvResult =
@@ -112,6 +115,8 @@ export function resolveWhatsAppEnv(
       phoneNumberId,
       to,
       graphVersion: readEnv("WHATSAPP_GRAPH_VERSION", env) ?? DEFAULT_GRAPH_VERSION,
+      ticketTemplate: readEnv("WHATSAPP_TICKET_TEMPLATE", env),
+      templateLanguage: readEnv("WHATSAPP_TEMPLATE_LANG", env) ?? "pl",
     },
   };
 }
@@ -208,14 +213,18 @@ interface GraphMessageResponse {
   error?: { message?: string; type?: string; code?: number };
 }
 
-export async function sendWhatsAppText(options: {
+interface SendOptions {
   token: string;
   phoneNumberId: string;
   to: string;
-  body: string;
   graphVersion?: string;
   fetchImpl?: typeof fetch;
-}): Promise<SendTextResult> {
+}
+
+async function postMessage(
+  options: SendOptions,
+  message: Record<string, unknown>,
+): Promise<SendTextResult> {
   if (!/^\d+$/.test(options.phoneNumberId)) {
     throw new WhatsAppSendError(500, "invalid_phone_number_id");
   }
@@ -232,8 +241,7 @@ export async function sendWhatsAppText(options: {
       messaging_product: "whatsapp",
       recipient_type: "individual",
       to: options.to,
-      type: "text",
-      text: { body: options.body, preview_url: false },
+      ...message,
     }),
   });
   const raw = await response.text();
@@ -253,4 +261,33 @@ export async function sendWhatsAppText(options: {
     throw new WhatsAppSendError(response.status, details);
   }
   return { messageId };
+}
+
+/** Free-form text: only delivered within 24h of the recipient's last message to the number. */
+export function sendWhatsAppText(
+  options: SendOptions & { body: string },
+): Promise<SendTextResult> {
+  return postMessage(options, {
+    type: "text",
+    text: { body: options.body, preview_url: false },
+  });
+}
+
+/** Approved template with body parameters `{{1}}`, `{{2}}`…: delivered any time. */
+export function sendWhatsAppTemplate(
+  options: SendOptions & { name: string; language: string; bodyParams: string[] },
+): Promise<SendTextResult> {
+  return postMessage(options, {
+    type: "template",
+    template: {
+      name: options.name,
+      language: { code: options.language },
+      components: [
+        {
+          type: "body",
+          parameters: options.bodyParams.map((text) => ({ type: "text", text })),
+        },
+      ],
+    },
+  });
 }

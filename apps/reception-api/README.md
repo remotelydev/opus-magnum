@@ -131,6 +131,22 @@ Expect HTTP 503 and JSON with `"error":"missing_whatsapp_env"`, `"missing":["WHA
 
 After filling `.env` and restarting `dev`, the same curl should return `"sent":true` and a `messageId`. The structured message should appear on Bartosz’s WhatsApp. Optional Graph version: `WHATSAPP_GRAPH_VERSION` (default `v22.0`).
 
+### Ticket template (outside the 24h window)
+
+Plain-text tickets only arrive within 24h of the recipient's last message to the number. An approved template arrives any time. In WhatsApp Manager → **Message templates** → **Create template**, choose category **Utility**, language **Polish**, and name `nowe_zgloszenie`, with this body:
+
+```
+Nowe zgłoszenie {{1}}: {{2}}. Odpowiedz na tę wiadomość: OK dzień.miesiąc godzina.
+```
+
+`{{1}}` is the ticket number (`#T-0001`) and `{{2}}` is the ticket line. Once Meta approves it, set it in `.env` and restart `dev`:
+
+```
+WHATSAPP_TICKET_TEMPLATE=nowe_zgloszenie
+```
+
+`/dev/ticket` then answers `"via":"template"`. Staff reply to it with `OK …` exactly as before. Leave the variable empty to go back to plain text.
+
 ## Staff OK reply → SMS (webhook)
 
 Each ticket now starts with a number (`#T-0001 · Turek · wizyta · …`, one counter for both sites). Staff confirm a visit by **replying to that ticket** in WhatsApp (hold the message → Reply):
