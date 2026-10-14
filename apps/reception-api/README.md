@@ -1,6 +1,6 @@
 # reception-api
 
-Dental clinic AI receptionist backend (step 6: WhatsApp ticket out).
+Dental clinic AI receptionist backend (step 7: staff OK reply → SMS).
 
 ```bash
 pnpm install
@@ -131,6 +131,39 @@ Expect HTTP 503 and JSON with `"error":"missing_whatsapp_env"`, `"missing":["WHA
 
 After filling `.env` and restarting `dev`, the same curl should return `"sent":true` and a `messageId`. The structured message should appear on Bartosz’s WhatsApp. Optional Graph version: `WHATSAPP_GRAPH_VERSION` (default `v22.0`).
 
+## Staff OK reply → SMS (webhook)
+
+Each ticket now starts with a number (`#T-0001 · Turek · wizyta · …`, one counter for both sites). Staff confirm a visit by **replying to that ticket** in WhatsApp (hold the message → Reply):
+
+```
+OK 7.10 14:30 proszę zabrać zdjęcie RTG
+```
+
+reception-api then sends the patient an SMS through SMSAPI.pl and answers on WhatsApp (`#T-0001: SMS wysłany do +48…`):
+
+```
+DentaPlus+ Turek: potwierdzamy wizytę 7.10 (śr) o 14:30. Proszę zabrać zdjęcie RTG. W razie zmiany prosimy o telefon +48690649589.
+```
+
+Rules: only `WHATSAPP_TO` may confirm; a year is optional (a past date means next year); the note after the time is at most 120 characters; a ticket is confirmed once. Wrong input gets a short Polish hint back. Without `SMSAPI_TOKEN` the SMS is logged and staff are told it was not sent.
+
+Tickets are kept in `apps/reception-api/data/tickets.json` (gitignored, override with `TICKETS_DIR`): number, WhatsApp message id, patient phone and site only, deleted after 32 days.
+
+Setup:
+
+1. Run the **named** tunnel (see above); a quick tunnel URL changes on restart.
+2. In `.env`: `WHATSAPP_APP_SECRET` (Meta app → App settings → Basic → App secret) and `WHATSAPP_VERIFY_TOKEN` (any random string, e.g. `openssl rand -hex 16`). Restart `dev`.
+3. Meta app → WhatsApp → Configuration → Webhook: Callback URL `https://<your tunnel host>/webhooks/whatsapp`, Verify token = the same string → **Verify and save**. Then subscribe to the `messages` field.
+4. `POST /dev/ticket`, reply `OK <date> <time>` to the ticket on WhatsApp, and watch the `dev` log for `staff reply handled`.
+
+Check the verify handshake locally:
+
+```bash
+curl "http://127.0.0.1:8788/webhooks/whatsapp?hub.mode=subscribe&hub.verify_token=$WHATSAPP_VERIFY_TOKEN&hub.challenge=123"
+```
+
+Expect `123`. A POST without a valid `X-Hub-Signature-256` gets 401.
+
 ## Transcripts
 
 Encrypted JSON only (AES-256-GCM). No audio files. Layout under this app:
@@ -163,4 +196,4 @@ curl -s -X POST http://127.0.0.1:8788/dev/purge-old \
 pnpm --filter reception-api test
 ```
 
-Script fixtures: `src/script.test.ts`. Transcript store / purge / opt-out: `src/transcripts.test.ts`. WhatsApp ticket fixture / Cloud API send: `src/whatsapp.test.ts`.
+Script fixtures: `src/script.test.ts`. Transcript store / purge / opt-out: `src/transcripts.test.ts`. WhatsApp ticket fixture / Cloud API send: `src/whatsapp.test.ts`. Webhook, OK parsing, ticket store and SMSAPI: `src/staff-reply.test.ts`.
