@@ -7,6 +7,7 @@ import {
   DEV_TICKET_FIXTURE,
   formatTicketMessage,
   resolveWhatsAppEnv,
+  sendWhatsAppTemplate,
   sendWhatsAppText,
   WhatsAppSendError,
   type DevTicketBody,
@@ -216,5 +217,39 @@ describe("sendWhatsAppText", () => {
         return true;
       },
     );
+  });
+
+  it("sends an approved template with body parameters", async () => {
+    let payload: Record<string, unknown> = {};
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({ messages: [{ id: "wamid.tpl" }] }), { status: 200 });
+    };
+
+    const result = await sendWhatsAppTemplate({
+      token: "EAA.secret",
+      phoneNumberId: "106540352242922",
+      to: "+48500111222",
+      name: "nowe_zgloszenie",
+      language: "pl",
+      bodyParams: ["#T-0001", "Turek · wizyta"],
+      fetchImpl,
+    });
+
+    assert.equal(result.messageId, "wamid.tpl");
+    assert.equal(payload.type, "template");
+    assert.deepEqual(payload.template, {
+      name: "nowe_zgloszenie",
+      language: { code: "pl" },
+      components: [
+        {
+          type: "body",
+          parameters: [
+            { type: "text", text: "#T-0001" },
+            { type: "text", text: "Turek · wizyta" },
+          ],
+        },
+      ],
+    });
   });
 });
