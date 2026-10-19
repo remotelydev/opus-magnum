@@ -230,3 +230,19 @@ pnpm --filter reception-api test
 ```
 
 Script fixtures: `src/script.test.ts`. Transcript store / purge / opt-out: `src/transcripts.test.ts`. WhatsApp ticket fixture / Cloud API send: `src/whatsapp.test.ts`. Webhook, OK parsing, ticket store and SMSAPI: `src/staff-reply.test.ts`.
+
+## ElevenLabs test agent
+
+A voice agent in ElevenLabs that uses the clinic file and the script rules, so the scripts can be heard and edited with the clinic. It has two tools that call this server through the tunnel: `sprawdz_godziny` (`GET /agent/hours/:site`, open now and next opening, holidays included) and `wyslij_zgloszenie` (`POST /agent/ticket/:site`, sends the WhatsApp ticket). Both check the `x-agent-secret` header against `ELEVENLABS_TOOL_SECRET`.
+
+1. Set `ELEVENLABS_API_KEY` and `ELEVENLABS_TOOL_SECRET` in `.env`.
+2. Run `dev` and the tunnel, and copy the tunnel's https URL.
+3. Create or update the agent (Turek by default, or add `poddebice`):
+
+```bash
+pnpm --filter reception-api agent:sync https://<tunnel host>
+```
+
+The script prints the agent's page; use its test call button to talk to it. A booking ends with a ticket on WhatsApp. It keeps the agent and tool ids in `data/elevenlabs-<site>.json`, so running it again updates the same agent. Run it again whenever the prompt changes or the quick tunnel URL changes.
+
+The prompt is built in `src/agent.ts`. Test callers only: real patient calls wait for the EU residency and zero retention answer (plan step 13).

@@ -1,8 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import { findLocation, loadConfig } from "./config.js";
+import { loadLocalEnv } from "./env.js";
+import { agentTicketBody, hoursAnswer, isValidToolSecret } from "./agent.js";
 import { getCachedPricelist } from "./prismic.js";
 import {
   createTranscriptStore,
@@ -33,30 +32,7 @@ import {
   type DevTicketBody,
 } from "./whatsapp.js";
 
-const localEnvPath = join(dirname(fileURLToPath(import.meta.url)), "../.env");
-if (existsSync(localEnvPath)) {
-  for (const rawLine of readFileSync(localEnvPath, "utf8").split("\n")) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) {
-      continue;
-    }
-    const eq = line.indexOf("=");
-    if (eq <= 0) {
-      continue;
-    }
-    const key = line.slice(0, eq).trim();
-    let value = line.slice(eq + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    if (process.env[key] === undefined) {
-      process.env[key] = value;
-    }
-  }
-}
+loadLocalEnv();
 
 const config = loadConfig();
 
@@ -264,35 +240,19 @@ const TICKET_INPUT_ERRORS = new Set([
   "invalid_slot",
 ]);
 
-app.post<{ Body: DevTicketBody }>("/dev/ticket", async (request, reply) => {
-  const body = request.body ?? {};
-  let ticket: BookingTicket;
-  try {
-    ticket = buildDevTicket(config, body);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "ticket_failed";
-    if (message === "unknown_location") {
-      return reply.code(404).send({
-        error: "unknown_location",
-        id: body.locationId,
-      });
-    }
-    if (TICKET_INPUT_ERRORS.has(message)) {
-      return reply.code(400).send({ error: message });
-    }
-    requestLog(error);
-    return reply.code(500).send({ error: "ticket_failed" });
-  }
+interface Delivery {
+  status: number;
+  body: Record<string, unknown>;
+}
+
+async function deliverTicket(ticket: BookingTicket): Promise<Delivery> {
   const env = resolveWhatsAppEnv();
   if (!env.ok) {
     const text = formatTicketMessage(ticket);
-    return reply.code(503).send({
-      error: "missing_whatsapp_env",
-      missing: env.missing,
-      sent: false,
-      ticket,
-      text,
-    });
+    return {
+      status: 503,
+      body: { error: "missing_whatsapp_env", missing: env.missing, sent: false, ticket, text },
+    };
   }
   const number = await tickets.nextNumber();
   const text = formatTicketMessage(ticket, number);
@@ -320,29 +280,100 @@ app.post<{ Body: DevTicketBody }>("/dev/ticket", async (request, reply) => {
       createdAt: new Date().toISOString(),
     });
     return {
-      ok: true,
-      sent: true,
-      to: env.config.to,
-      messageId: sent.messageId,
-      via,
-      number,
-      ticket,
-      text,
+      status: 200,
+      body: {
+        ok: true,
+        sent: true,
+        to: env.config.to,
+        messageId: sent.messageId,
+        via,
+        number,
+        ticket,
+        text,
+      },
     };
   } catch (error) {
     if (error instanceof WhatsAppSendError) {
-      return reply.code(502).send({
-        error: "whatsapp_send_failed",
-        status: error.status,
-        details: error.details,
-        sent: false,
-        ticket,
-        text,
-      });
+      return {
+        status: 502,
+        body: {
+          error: "whatsapp_send_failed",
+          status: error.status,
+          details: error.details,
+          sent: false,
+          ticket,
+          text,
+        },
+      };
     }
     requestLog(error);
-    return reply.code(502).send({ error: "whatsapp_send_failed", sent: false });
+    return { status: 502, body: { error: "whatsapp_send_failed", sent: false } };
   }
+}
+
+app.post<{ Body: DevTicketBody }>("/dev/ticket", async (request, reply) => {
+  const body = request.body ?? {};
+  let ticket: BookingTicket;
+  try {
+    ticket = buildDevTicket(config, body);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "ticket_failed";
+    if (message === "unknown_location") {
+      return reply.code(404).send({
+        error: "unknown_location",
+        id: body.locationId,
+      });
+    }
+    if (TICKET_INPUT_ERRORS.has(message)) {
+      return reply.code(400).send({ error: message });
+    }
+    requestLog(error);
+    return reply.code(500).send({ error: "ticket_failed" });
+  }
+  const delivery = await deliverTicket(ticket);
+  return reply.code(delivery.status).send(delivery.body);
+});
+
+const agentToolSecret = process.env.ELEVENLABS_TOOL_SECRET?.trim();
+if (!agentToolSecret) {
+  app.log.warn("ELEVENLABS_TOOL_SECRET missing; /agent/* tool routes will refuse requests");
+}
+
+app.register(async (agentScope) => {
+  agentScope.addHook("onRequest", async (request, reply) => {
+    if (!agentToolSecret) {
+      return reply.code(503).send({ error: "missing_tool_secret" });
+    }
+    if (!isValidToolSecret(request.headers["x-agent-secret"], agentToolSecret)) {
+      return reply.code(401).send({ error: "invalid_tool_secret" });
+    }
+  });
+
+  agentScope.get<{ Params: { site: string } }>("/agent/hours/:site", async (request, reply) => {
+    const location = findLocation(config, request.params.site);
+    if (!location) {
+      return reply.code(404).send({ error: "unknown_location" });
+    }
+    return hoursAnswer(config, location);
+  });
+
+  agentScope.post<{ Params: { site: string } }>("/agent/ticket/:site", async (request, reply) => {
+    let ticket: BookingTicket;
+    try {
+      ticket = buildDevTicket(config, agentTicketBody(request.params.site, request.body));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "ticket_failed";
+      if (message === "unknown_location") {
+        return reply.code(404).send({ error: message });
+      }
+      return reply.code(400).send({ error: message });
+    }
+    const delivery = await deliverTicket(ticket);
+    if (delivery.status !== 200) {
+      return reply.code(delivery.status).send({ error: delivery.body.error });
+    }
+    return { ok: true, ticket: ticketLabel(delivery.body.number as number) };
+  });
 });
 
 app.get<{ Querystring: Record<string, string | undefined> }>(
