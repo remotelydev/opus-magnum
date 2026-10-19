@@ -111,7 +111,7 @@ Edit `apps/reception-api/.env` (gitignored). Set:
 - `WHATSAPP_PHONE_NUMBER_ID=` — test Phone number ID (digits)
 - `WHATSAPP_TO=` — Bartosz’s number with country code, e.g. `+48500111222`
 
-The API loads `apps/reception-api/.env` on start (does not override vars already in the shell). Restart `dev` after editing `.env`.
+The API loads `apps/reception-api/.env` on start (does not override vars already in the shell). `dev` restarts by itself when `src/` or `.env` changes.
 
 Without credentials, the send path still builds the fixture and fails clearly. Terminal 1:
 
@@ -130,6 +130,22 @@ curl -sS -i -X POST http://127.0.0.1:8788/dev/ticket \
 Expect HTTP 503 and JSON with `"error":"missing_whatsapp_env"`, `"missing":["WHATSAPP_TOKEN","WHATSAPP_PHONE_NUMBER_ID","WHATSAPP_TO"]`, plus `ticket` and `text` matching the fixture, e.g. `Turek · wizyta · nowy · wtorek rano · Jan Kowalski · +48555111222 · 05.10 14:21`.
 
 After filling `.env` and restarting `dev`, the same curl should return `"sent":true` and a `messageId`. The structured message should appear on Bartosz’s WhatsApp. Optional Graph version: `WHATSAPP_GRAPH_VERSION` (default `v22.0`).
+
+### Ticket template (outside the 24h window)
+
+Plain-text tickets only arrive within 24h of the recipient's last message to the number. An approved template arrives any time. In WhatsApp Manager → **Message templates** → **Create template**, choose category **Utility**, language **Polish**, and name `nowe_zgloszenie`, with this body:
+
+```
+Nowe zgłoszenie {{1}}: {{2}}. Odpowiedz na tę wiadomość: OK dzień.miesiąc godzina.
+```
+
+`{{1}}` is the ticket number (`#T-0001`) and `{{2}}` is the ticket line. Once Meta approves it, set it in `.env` and restart `dev`:
+
+```
+WHATSAPP_TICKET_TEMPLATE=nowe_zgloszenie
+```
+
+`/dev/ticket` then answers `"via":"template"`. Staff reply to it with `OK …` exactly as before. Leave the variable empty to go back to plain text.
 
 ## Staff OK reply → SMS (webhook)
 

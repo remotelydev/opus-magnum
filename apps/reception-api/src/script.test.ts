@@ -6,11 +6,8 @@ import { hoursSummary, isOpenAt, reply } from "./script.js";
 const config = loadConfig();
 const tz = config.timezone;
 
-/** Monday 14 Sep 2026 10:00 in Europe/Warsaw (CEST). */
 const mondayOpen = new Date("2026-09-14T08:00:00.000Z");
-/** Saturday 12 Sep 2026 16:30 in Europe/Warsaw — after 15:00 close. */
 const saturdayClosed = new Date("2026-09-12T14:30:00.000Z");
-/** Sunday 13 Sep 2026 12:00 in Europe/Warsaw. */
 const sundayClosed = new Date("2026-09-13T10:00:00.000Z");
 
 describe("opening hours", () => {

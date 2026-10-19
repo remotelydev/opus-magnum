@@ -9,17 +9,12 @@ export const WHATSAPP_ENV_KEYS = [
 
 export const DEFAULT_GRAPH_VERSION = "v22.0";
 
-/** Closed list, so no free text can reach Meta through this field. */
 export const TICKET_CATEGORIES = ["book", "callback", "other"] as const;
 export type TicketCategory = (typeof TICKET_CATEGORIES)[number];
 
 const SLOT_MAX_LENGTH = 40;
 const NAME_MAX_LENGTH = 80;
 
-/**
- * Minimal booking ticket. It must never carry a transcript, symptoms,
- * or a free-text visit reason: only these fields go to Meta.
- */
 export interface BookingTicket {
   locationId: string;
   site: string;
@@ -43,7 +38,6 @@ export interface DevTicketBody {
   returning?: boolean | null;
 }
 
-/** Fixture booking ticket for POST /dev/ticket (sample patient; destination is WHATSAPP_TO). */
 export const DEV_TICKET_FIXTURE = {
   locationId: "turek",
   name: "Jan Kowalski",
@@ -59,6 +53,8 @@ export interface WhatsAppEnv {
   phoneNumberId: string;
   to: string;
   graphVersion: string;
+  ticketTemplate: string | undefined;
+  templateLanguage: string;
 }
 
 export type WhatsAppEnvResult =
@@ -112,6 +108,8 @@ export function resolveWhatsAppEnv(
       phoneNumberId,
       to,
       graphVersion: readEnv("WHATSAPP_GRAPH_VERSION", env) ?? DEFAULT_GRAPH_VERSION,
+      ticketTemplate: readEnv("WHATSAPP_TICKET_TEMPLATE", env),
+      templateLanguage: readEnv("WHATSAPP_TEMPLATE_LANG", env) ?? "pl",
     },
   };
 }
@@ -144,7 +142,6 @@ function siteLabel(config: AppConfig, locationName: string): string {
   return locationName.replace(config.brand, "").trim() || locationName;
 }
 
-/** One line, e.g. `#T-0412 · PILNE · Turek · wizyta · nowy · wtorek rano · Jan Kowalski · +48555111222 · 14.09 10:00`. */
 export function formatTicketMessage(ticket: BookingTicket, number?: number): string {
   const parts = [
     number === undefined ? null : ticketLabel(number),
@@ -208,14 +205,18 @@ interface GraphMessageResponse {
   error?: { message?: string; type?: string; code?: number };
 }
 
-export async function sendWhatsAppText(options: {
+interface SendOptions {
   token: string;
   phoneNumberId: string;
   to: string;
-  body: string;
   graphVersion?: string;
   fetchImpl?: typeof fetch;
-}): Promise<SendTextResult> {
+}
+
+async function postMessage(
+  options: SendOptions,
+  message: Record<string, unknown>,
+): Promise<SendTextResult> {
   if (!/^\d+$/.test(options.phoneNumberId)) {
     throw new WhatsAppSendError(500, "invalid_phone_number_id");
   }
@@ -232,8 +233,7 @@ export async function sendWhatsAppText(options: {
       messaging_product: "whatsapp",
       recipient_type: "individual",
       to: options.to,
-      type: "text",
-      text: { body: options.body, preview_url: false },
+      ...message,
     }),
   });
   const raw = await response.text();
@@ -253,4 +253,31 @@ export async function sendWhatsAppText(options: {
     throw new WhatsAppSendError(response.status, details);
   }
   return { messageId };
+}
+
+export function sendWhatsAppText(
+  options: SendOptions & { body: string },
+): Promise<SendTextResult> {
+  return postMessage(options, {
+    type: "text",
+    text: { body: options.body, preview_url: false },
+  });
+}
+
+export function sendWhatsAppTemplate(
+  options: SendOptions & { name: string; language: string; bodyParams: string[] },
+): Promise<SendTextResult> {
+  return postMessage(options, {
+    type: "template",
+    template: {
+      name: options.name,
+      language: { code: options.language },
+      components: [
+        {
+          type: "body",
+          parameters: options.bodyParams.map((text) => ({ type: "text", text })),
+        },
+      ],
+    },
+  });
 }

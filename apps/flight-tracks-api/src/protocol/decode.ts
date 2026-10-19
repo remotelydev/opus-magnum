@@ -26,7 +26,7 @@ export function decodeTrackPayload(buf: Buffer): TrackPayload {
   const windowOrigin = buf.readDoubleLE(o); o += 8;
   const flightCount = buf.readUInt32LE(o); o += 4;
   const sampleCount = buf.readUInt32LE(o); o += 4;
-  o += 8; // reserved
+  o += 8;
 
   const need =
     TRK1_HEADER_BYTES + flightCount * TRK1_FLIGHT_BYTES + sampleCount * 16;
@@ -41,7 +41,7 @@ export function decodeTrackPayload(buf: Buffer): TrackPayload {
     const sampleCountF = buf.readUInt32LE(o); o += 4;
     const tStart = buf.readFloatLE(o); o += 4;
     const tEnd = buf.readFloatLE(o); o += 4;
-    o += 4; // reserved
+    o += 4;
     flights.push({ id, sampleOffset, sampleCount: sampleCountF, tStart, tEnd });
   }
 

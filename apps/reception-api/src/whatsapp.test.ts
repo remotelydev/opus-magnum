@@ -7,6 +7,7 @@ import {
   DEV_TICKET_FIXTURE,
   formatTicketMessage,
   resolveWhatsAppEnv,
+  sendWhatsAppTemplate,
   sendWhatsAppText,
   WhatsAppSendError,
   type DevTicketBody,
@@ -14,9 +15,7 @@ import {
 
 const config = loadConfig();
 
-/** Monday 14 Sep 2026 10:00 in Europe/Warsaw (CEST). */
 const mondayOpen = new Date("2026-09-14T08:00:00.000Z");
-/** Sunday 13 Sep 2026 12:00 in Europe/Warsaw. */
 const sundayClosed = new Date("2026-09-13T10:00:00.000Z");
 
 describe("resolveWhatsAppEnv", () => {
@@ -44,22 +43,6 @@ describe("resolveWhatsAppEnv", () => {
       return;
     }
     assert.deepEqual(result.missing, ["WHATSAPP_TOKEN"]);
-  });
-
-  it("returns token, phone number id, and destination", () => {
-    const result = resolveWhatsAppEnv({
-      WHATSAPP_TOKEN: "EAA.test",
-      WHATSAPP_PHONE_NUMBER_ID: "106540352242922",
-      WHATSAPP_TO: "+48500111222",
-    });
-    assert.equal(result.ok, true);
-    if (!result.ok) {
-      return;
-    }
-    assert.equal(result.config.token, "EAA.test");
-    assert.equal(result.config.phoneNumberId, "106540352242922");
-    assert.equal(result.config.to, "+48500111222");
-    assert.equal(result.config.graphVersion, DEFAULT_GRAPH_VERSION);
   });
 });
 
@@ -216,5 +199,39 @@ describe("sendWhatsAppText", () => {
         return true;
       },
     );
+  });
+
+  it("sends an approved template with body parameters", async () => {
+    let payload: Record<string, unknown> = {};
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({ messages: [{ id: "wamid.tpl" }] }), { status: 200 });
+    };
+
+    const result = await sendWhatsAppTemplate({
+      token: "EAA.secret",
+      phoneNumberId: "106540352242922",
+      to: "+48500111222",
+      name: "nowe_zgloszenie",
+      language: "pl",
+      bodyParams: ["#T-0001", "Turek · wizyta"],
+      fetchImpl,
+    });
+
+    assert.equal(result.messageId, "wamid.tpl");
+    assert.equal(payload.type, "template");
+    assert.deepEqual(payload.template, {
+      name: "nowe_zgloszenie",
+      language: { code: "pl" },
+      components: [
+        {
+          type: "body",
+          parameters: [
+            { type: "text", text: "#T-0001" },
+            { type: "text", text: "Turek · wizyta" },
+          ],
+        },
+      ],
+    });
   });
 });

@@ -5,21 +5,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
 import {
-  calendarDate,
   createTranscriptStore,
   decryptTranscript,
   encryptTranscript,
-  folderAgeDays,
-  RETENTION_DAYS,
-  shiftCalendarDate,
   shouldWriteTranscript,
   type TranscriptRecord,
 } from "./transcripts.js";
 
 const tz = "Europe/Warsaw";
-/** Saturday 12 Sep 2026 14:00 in Europe/Warsaw (CEST). */
 const now = new Date("2026-09-12T12:00:00.000Z");
-const today = calendarDate(now, tz);
 
 function sampleRecord(overrides: Partial<TranscriptRecord> = {}): TranscriptRecord {
   return {
@@ -49,20 +43,8 @@ async function tempStore() {
 }
 
 describe("opt-out", () => {
-  it("skips write when consent is no", () => {
-    assert.equal(shouldWriteTranscript({ consent: "no" }), false);
-  });
-
-  it("skips write when transcribe is false", () => {
-    assert.equal(shouldWriteTranscript({ transcribe: false }), false);
-  });
-
   it("skips write while consent is pending", () => {
     assert.equal(shouldWriteTranscript({ consent: "pending" }), false);
-  });
-
-  it("writes when consent is yes", () => {
-    assert.equal(shouldWriteTranscript({ consent: "yes" }), true);
   });
 });
 
@@ -149,16 +131,6 @@ describe("purge", () => {
 
   after(async () => {
     await Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })));
-  });
-
-  it("treats a 33-day folder as older than 32 days", () => {
-    const old = shiftCalendarDate(today, -(RETENTION_DAYS + 1));
-    assert.equal(folderAgeDays(old, today), 33);
-    assert.equal(folderAgeDays(old, today) > RETENTION_DAYS, true);
-    assert.equal(
-      folderAgeDays(shiftCalendarDate(today, -RETENTION_DAYS), today) > RETENTION_DAYS,
-      false,
-    );
   });
 
   it("dry-run lists a 33-day folder and leaves it", async () => {

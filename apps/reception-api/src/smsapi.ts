@@ -33,10 +33,6 @@ interface SmsApiResponse {
   message?: string;
 }
 
-/**
- * Sends one SMS through SMSAPI.pl. With no token it only logs the text,
- * so the whole OK → SMS path can be tried before the clinic has an account.
- */
 export async function sendSms(options: {
   env: SmsApiEnv | null;
   to: string;

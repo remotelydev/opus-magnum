@@ -31,7 +31,6 @@ export function resolveWebhookEnv(
   return { ok: true, config: { appSecret, verifyToken } };
 }
 
-/** Meta's subscribe check: echo `hub.challenge` only when the token matches. */
 export function verifySubscription(
   query: Record<string, string | undefined>,
   verifyToken: string,
@@ -47,7 +46,6 @@ export function verifySubscription(
   return query["hub.challenge"];
 }
 
-/** `X-Hub-Signature-256: sha256=<hex HMAC of the raw body with the app secret>`. */
 export function isValidSignature(
   rawBody: Buffer,
   header: string | undefined,
@@ -65,7 +63,6 @@ export interface InboundText {
   id: string;
   from: string;
   text: string;
-  /** Id of the message this one replies to (WhatsApp swipe-to-reply). */
   contextId: string | null;
 }
 
@@ -86,7 +83,6 @@ interface WebhookPayload {
   }>;
 }
 
-/** Text messages only; statuses, reactions and media are ignored. */
 export function extractTextMessages(payload: unknown): InboundText[] {
   const out: InboundText[] = [];
   for (const entry of (payload as WebhookPayload)?.entry ?? []) {
@@ -124,19 +120,13 @@ export type StaffReplyOutcome =
 export interface StaffReplyDeps {
   config: AppConfig;
   store: TicketStore;
-  /** WhatsApp number allowed to confirm tickets (WHATSAPP_TO). */
   staffNumber: string;
-  /** Answer the staff member on WhatsApp. */
   replyToStaff: (text: string) => Promise<void>;
   sendSms: (to: string, message: string) => Promise<SendSmsResult>;
   now?: () => Date;
   onError?: (error: unknown) => void;
 }
 
-/**
- * A staff reply to a ticket: `OK 7.10 14:30 …` → SMS to the patient, then a
- * short note back on WhatsApp so staff see it went through.
- */
 export async function handleStaffMessage(
   message: InboundText,
   deps: StaffReplyDeps,
@@ -174,7 +164,6 @@ export async function handleStaffMessage(
   try {
     result = await deps.sendSms(ticket.phone, sms);
   } catch (error) {
-    // Not saved, so staff can simply send the same OK again.
     await deps.replyToStaff(`${label}: SMS nie wysłany (błąd SMSAPI). Spróbuj ponownie lub zadzwoń do pacjenta.`);
     deps.onError?.(error);
     return "sms_failed";

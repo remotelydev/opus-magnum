@@ -13,7 +13,7 @@ import {
   type TranscriptMessage,
   type TranscriptRecord,
 } from "./transcripts.js";
-import { createTicketStore } from "./tickets.js";
+import { createTicketStore, ticketLabel } from "./tickets.js";
 import { resolveSmsApiEnv, sendSms } from "./smsapi.js";
 import {
   extractTextMessages,
@@ -26,6 +26,7 @@ import {
   buildDevTicket,
   formatTicketMessage,
   resolveWhatsAppEnv,
+  sendWhatsAppTemplate,
   sendWhatsAppText,
   WhatsAppSendError,
   type BookingTicket,
@@ -295,14 +296,22 @@ app.post<{ Body: DevTicketBody }>("/dev/ticket", async (request, reply) => {
   }
   const number = await tickets.nextNumber();
   const text = formatTicketMessage(ticket, number);
+  const via = env.config.ticketTemplate ? "template" : "text";
   try {
-    const sent = await sendWhatsAppText({
+    const target = {
       token: env.config.token,
       phoneNumberId: env.config.phoneNumberId,
       to: env.config.to,
       graphVersion: env.config.graphVersion,
-      body: text,
-    });
+    };
+    const sent = env.config.ticketTemplate
+      ? await sendWhatsAppTemplate({
+          ...target,
+          name: env.config.ticketTemplate,
+          language: env.config.templateLanguage,
+          bodyParams: [ticketLabel(number), formatTicketMessage(ticket)],
+        })
+      : await sendWhatsAppText({ ...target, body: text });
     await tickets.save({
       number,
       messageId: sent.messageId,
@@ -315,6 +324,7 @@ app.post<{ Body: DevTicketBody }>("/dev/ticket", async (request, reply) => {
       sent: true,
       to: env.config.to,
       messageId: sent.messageId,
+      via,
       number,
       ticket,
       text,
@@ -350,7 +360,6 @@ app.get<{ Querystring: Record<string, string | undefined> }>(
   },
 );
 
-// Own scope: the signature is over the raw bytes, so this route parses JSON itself.
 await app.register(async (scope) => {
   scope.addContentTypeParser(
     "application/json",
@@ -408,7 +417,6 @@ await app.register(async (scope) => {
         });
         app.log.info({ messageId: message.id, outcome }, "staff reply handled");
       } catch (error) {
-        // Meta retries non-200s for days; one bad message must not block the rest.
         requestLog(error);
       }
     }

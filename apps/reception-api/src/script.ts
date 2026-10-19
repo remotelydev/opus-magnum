@@ -31,7 +31,6 @@ const JS_WEEKDAYS = [
 
 type WeekdayKey = (typeof JS_WEEKDAYS)[number];
 
-/** Clinic week, Monday first — used to print hours. */
 const CLINIC_WEEK: WeekdayKey[] = [
   "monday",
   "tuesday",
@@ -94,7 +93,6 @@ function sameHours(a: DayHours | null, b: DayHours | null): boolean {
   return a.open === b.open && a.close === b.close;
 }
 
-/** Spoken hours from `location.hours` only — groups consecutive days with the same times. */
 export function hoursSummary(hours: WeekHours): string {
   const groups: { start: WeekdayKey; end: WeekdayKey; spec: DayHours | null }[] =
     [];
