@@ -1,18 +1,21 @@
 function easterSunday(year: number): Date {
-  const a = year % 19;
-  const b = Math.floor(year / 100);
-  const c = year % 100;
-  const d = Math.floor(b / 4);
-  const e = b % 4;
-  const f = Math.floor((b + 8) / 25);
-  const g = Math.floor((b - f + 1) / 3);
-  const h = (19 * a + b - d - g + 15) % 30;
-  const i = Math.floor(c / 4);
-  const k = c % 4;
-  const l = (32 + 2 * e + 2 * i - h - k) % 7;
-  const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const month = Math.floor((h + l - 7 * m + 114) / 31);
-  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  const goldenNumber = year % 19;
+  const century = Math.floor(year / 100);
+  const yearInCentury = year % 100;
+  const skippedLeapCenturies = Math.floor(century / 4);
+  const centuryLeapRemainder = century % 4;
+  const moonOrbitCorrection = Math.floor((century + 8) / 25);
+  const lunarCorrection = Math.floor((century - moonOrbitCorrection + 1) / 3);
+  const daysToFullMoon =
+    (19 * goldenNumber + century - skippedLeapCenturies - lunarCorrection + 15) % 30;
+  const leapYearsInCentury = Math.floor(yearInCentury / 4);
+  const yearLeapRemainder = yearInCentury % 4;
+  const daysToSunday =
+    (32 + 2 * centuryLeapRemainder + 2 * leapYearsInCentury - daysToFullMoon - yearLeapRemainder) % 7;
+  const lateFullMoonShift = Math.floor((goldenNumber + 11 * daysToFullMoon + 22 * daysToSunday) / 451);
+  const monthAndDay = daysToFullMoon + daysToSunday - 7 * lateFullMoonShift + 114;
+  const month = Math.floor(monthAndDay / 31);
+  const day = (monthAndDay % 31) + 1;
   return new Date(Date.UTC(year, month - 1, day));
 }
 
