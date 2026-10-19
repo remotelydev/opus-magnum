@@ -1,12 +1,9 @@
 import type { LocationConfig } from "./config.js";
 
-/** Free text after the time, carried into the SMS. Kept short: one SMS part is 70 chars with Polish letters. */
 export const NOTE_MAX_LENGTH = 120;
 
 export interface StaffConfirmation {
-  /** `YYYY-MM-DD` */
   date: string;
-  /** `HH:MM` */
   time: string;
   note: string | null;
 }
@@ -37,10 +34,6 @@ function isValidDate(year: number, month: number, day: number): boolean {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/**
- * `OK 7.10 14:30 proszę zabrać zdjęcie RTG` → date, time and an optional note.
- * Without a year, a date earlier than today means next year (`OK 3.01` sent in December).
- */
 export function parseStaffReply(text: string, timeZone: string, now = new Date()): ParseResult {
   const match = OK_PATTERN.exec(text);
   if (!match) {
@@ -90,10 +83,6 @@ function sentence(text: string): string {
   return /[.!?]$/.test(capped) ? capped : `${capped}.`;
 }
 
-/**
- * Clinic, date and time only: no reason, no specialty.
- * `DentaPlus+ Turek: potwierdzamy wizytę 7.10 (wt) o 14:30. W razie zmiany prosimy o telefon +48690649589.`
- */
 export function formatConfirmationSms(
   location: Pick<LocationConfig, "name" | "phone">,
   confirmation: StaffConfirmation,

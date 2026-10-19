@@ -360,7 +360,6 @@ app.get<{ Querystring: Record<string, string | undefined> }>(
   },
 );
 
-// Own scope: the signature is over the raw bytes, so this route parses JSON itself.
 await app.register(async (scope) => {
   scope.addContentTypeParser(
     "application/json",
@@ -418,7 +417,6 @@ await app.register(async (scope) => {
         });
         app.log.info({ messageId: message.id, outcome }, "staff reply handled");
       } catch (error) {
-        // Meta retries non-200s for days; one bad message must not block the rest.
         requestLog(error);
       }
     }

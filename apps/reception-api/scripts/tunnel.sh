@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Cloudflare Tunnel in front of local reception-api (127.0.0.1:8788).
-# Named tunnel when TUNNEL_TOKEN is set; otherwise a quick trycloudflare URL.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

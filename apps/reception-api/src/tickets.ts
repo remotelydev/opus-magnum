@@ -4,13 +4,8 @@ import { fileURLToPath } from "node:url";
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Same retention as transcripts: a ticket carries a patient phone number. */
 export const TICKET_RETENTION_DAYS = 32;
 
-/**
- * What the OK reply needs to find its way back to the patient. No name,
- * slot or category: those already went to WhatsApp and are not needed here.
- */
 export interface TicketRecord {
   number: number;
   messageId: string;
@@ -35,13 +30,11 @@ export function ticketsDir(env: NodeJS.Dict<string> = process.env): string {
   return env.TICKETS_DIR ?? join(packageRoot, "data");
 }
 
-/** `#T-0412`: one counter for both sites. */
 export function ticketLabel(number: number): string {
   return `#T-${String(number).padStart(4, "0")}`;
 }
 
 export interface TicketStore {
-  /** Reserves the next number before the WhatsApp send, so the ticket text can carry it. */
   nextNumber(): Promise<number>;
   save(record: TicketRecord): Promise<void>;
   findByMessageId(messageId: string): Promise<TicketRecord | undefined>;
@@ -73,7 +66,6 @@ export function createTicketStore(options: { dir?: string } = {}): TicketStore {
     await rename(tmp, path);
   }
 
-  /** Serializes read-modify-write so two webhooks never interleave. */
   function locked<T>(fn: () => Promise<T>): Promise<T> {
     const run = queue.then(fn, fn);
     queue = run.catch(() => undefined);

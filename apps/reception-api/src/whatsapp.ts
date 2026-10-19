@@ -9,17 +9,12 @@ export const WHATSAPP_ENV_KEYS = [
 
 export const DEFAULT_GRAPH_VERSION = "v22.0";
 
-/** Closed list, so no free text can reach Meta through this field. */
 export const TICKET_CATEGORIES = ["book", "callback", "other"] as const;
 export type TicketCategory = (typeof TICKET_CATEGORIES)[number];
 
 const SLOT_MAX_LENGTH = 40;
 const NAME_MAX_LENGTH = 80;
 
-/**
- * Minimal booking ticket. It must never carry a transcript, symptoms,
- * or a free-text visit reason: only these fields go to Meta.
- */
 export interface BookingTicket {
   locationId: string;
   site: string;
@@ -43,7 +38,6 @@ export interface DevTicketBody {
   returning?: boolean | null;
 }
 
-/** Fixture booking ticket for POST /dev/ticket (sample patient; destination is WHATSAPP_TO). */
 export const DEV_TICKET_FIXTURE = {
   locationId: "turek",
   name: "Jan Kowalski",
@@ -59,7 +53,6 @@ export interface WhatsAppEnv {
   phoneNumberId: string;
   to: string;
   graphVersion: string;
-  /** Approved template for tickets (`nowe_zgloszenie`); without it tickets go as plain text. */
   ticketTemplate: string | undefined;
   templateLanguage: string;
 }
@@ -149,7 +142,6 @@ function siteLabel(config: AppConfig, locationName: string): string {
   return locationName.replace(config.brand, "").trim() || locationName;
 }
 
-/** One line, e.g. `#T-0412 · PILNE · Turek · wizyta · nowy · wtorek rano · Jan Kowalski · +48555111222 · 14.09 10:00`. */
 export function formatTicketMessage(ticket: BookingTicket, number?: number): string {
   const parts = [
     number === undefined ? null : ticketLabel(number),
@@ -263,7 +255,6 @@ async function postMessage(
   return { messageId };
 }
 
-/** Free-form text: only delivered within 24h of the recipient's last message to the number. */
 export function sendWhatsAppText(
   options: SendOptions & { body: string },
 ): Promise<SendTextResult> {
@@ -273,7 +264,6 @@ export function sendWhatsAppText(
   });
 }
 
-/** Approved template with body parameters `{{1}}`, `{{2}}`…: delivered any time. */
 export function sendWhatsAppTemplate(
   options: SendOptions & { name: string; language: string; bodyParams: string[] },
 ): Promise<SendTextResult> {

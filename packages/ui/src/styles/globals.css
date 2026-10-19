@@ -57,10 +57,8 @@
 }
 
 :root {
-  /* Lyra: sharp corners */
   --radius: 0rem;
 
-  /* Newspaper palette — Tailwind stone, same mapping as stock-chart */
   --background: theme(--color-stone-100);
   --background-glow: theme(--color-stone-50);
   --foreground: theme(--color-stone-800);
