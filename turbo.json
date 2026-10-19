@@ -12,6 +12,7 @@
     "lint": {
       "dependsOn": ["^lint"]
     },
+    "test": {},
     "storybook": {
       "cache": false,
       "persistent": true
