@@ -27,6 +27,7 @@ export interface LocationConfig {
   phone: string;
   email: string;
   hours: WeekHours;
+  closedDates?: string[];
   services: string[];
 }
 
