@@ -24,6 +24,8 @@ pnpm --filter reception-api dev
 
 One shared cennik in Prismic for both sites (not split by city). Hours/phones stay in `config/default.json` (contact page is more accurate than Prismic `godziny`).
 
+Polish public holidays (Easter-based ones included, and 24 December from 2025) count as closed. For a one-off closure, add `"closedDates": ["2026-12-31"]` to that location in `config/default.json`.
+
 Override bind with `HOST` and `PORT`, or `CONFIG_PATH` for another JSON file. `TRANSCRIPTS_DIR` moves the folder (default: `apps/reception-api/transcripts`, gitignored).
 
 ## Public URL

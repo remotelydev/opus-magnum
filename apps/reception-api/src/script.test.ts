@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { loadConfig } from "./config.js";
-import { hoursSummary, isOpenAt, reply } from "./script.js";
+import { polishHolidays } from "./holidays.js";
+import { hoursSummary, isOpenAt, nextOpenLabel, reply } from "./script.js";
 
 const config = loadConfig();
 const tz = config.timezone;
@@ -43,6 +44,37 @@ describe("opening hours", () => {
   });
 });
 
+describe("public holidays", () => {
+  const turek = config.locations.find((item) => item.id === "turek");
+  assert.ok(turek);
+
+  it("computes the Easter-based holidays", () => {
+    const days = polishHolidays(2026);
+    assert.ok(days.includes("2026-04-05"));
+    assert.ok(days.includes("2026-04-06"));
+    assert.ok(days.includes("2026-05-24"));
+    assert.ok(days.includes("2026-06-04"));
+    assert.ok(polishHolidays(2027).includes("2027-03-29"));
+  });
+
+  it("is closed on a holiday during normal hours", () => {
+    assert.equal(isOpenAt(turek.hours, new Date("2026-12-24T09:00:00.000Z"), tz), false);
+    assert.equal(isOpenAt(turek.hours, new Date("2026-04-06T08:00:00.000Z"), tz), false);
+    assert.equal(isOpenAt(turek.hours, new Date("2026-12-28T09:00:00.000Z"), tz), true);
+  });
+
+  it("skips holidays when saying when the clinic opens", () => {
+    const evening = new Date("2026-12-23T19:30:00.000Z");
+    assert.equal(nextOpenLabel(turek.hours, evening, tz), "w poniedziałek o 08:00");
+  });
+
+  it("treats closedDates from the clinic file as closed", () => {
+    const friday = new Date("2026-10-23T08:00:00.000Z");
+    assert.equal(isOpenAt(turek.hours, friday, tz), true);
+    assert.equal(isOpenAt(turek.hours, friday, tz, ["2026-10-23"]), false);
+  });
+});
+
 describe("script fixtures", () => {
   it("pending consent only plays the recording notice and does not transcribe", () => {
     const result = reply(config, {
@@ -51,6 +83,7 @@ describe("script fixtures", () => {
       consent: "pending",
     });
     assert.match(result.lines[0] ?? "", /nagrywana/);
+    assert.match(result.lines[0] ?? "", /asystentem AI/);
     assert.match(result.lines[0] ?? "", /nie zgadzam się/i);
     assert.equal(result.transcribe, false);
     assert.equal(result.action, "none");
@@ -106,6 +139,8 @@ describe("script fixtures", () => {
     assert.equal(result.action, "collect_booking");
     assert.match(result.lines.join(" "), /SMS/);
     assert.match(result.lines.join(" "), /Nie obiecuję konkretnej godziny/);
+    assert.match(result.lines.join(" "), /pilna/);
+    assert.doesNotMatch(result.lines.join(" "), /powód/);
   });
 
   it("emergency while open transfers and does not diagnose", () => {

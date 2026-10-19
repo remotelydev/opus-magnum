@@ -1,4 +1,5 @@
 import type { AppConfig, LocationConfig, DayHours, WeekHours } from "./config.js";
+import { isClosedDate } from "./holidays.js";
 
 export type Intent = "hours" | "book" | "emergency" | "human" | "other";
 export type Consent = "pending" | "yes" | "no";
@@ -61,21 +62,33 @@ const WEEKDAY_ACCUSATIVE: Record<WeekdayKey, string> = {
   sunday: "niedzielę",
 };
 
-function zoned(now: Date, timeZone: string): { weekday: WeekdayKey; minutes: number } {
+function zoned(
+  now: Date,
+  timeZone: string,
+): { weekday: WeekdayKey; minutes: number; date: string } {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,
     weekday: "long",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
   }).formatToParts(now);
-  const weekdayName = parts.find((part) => part.type === "weekday")?.value ?? "Monday";
-  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? "0");
-  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? "0");
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  const weekdayName = get("weekday") || "Monday";
+  const hour = Number(get("hour") || "0");
+  const minute = Number(get("minute") || "0");
   const weekday = JS_WEEKDAYS.find(
     (key) => key === weekdayName.toLowerCase(),
   ) as WeekdayKey;
-  return { weekday, minutes: hour * 60 + minute };
+  return {
+    weekday,
+    minutes: hour * 60 + minute,
+    date: `${get("year")}-${get("month")}-${get("day")}`,
+  };
 }
 
 function parseHm(value: string): number {
@@ -123,10 +136,11 @@ export function isOpenAt(
   hours: WeekHours,
   now: Date,
   timeZone: string,
+  closedDates: readonly string[] = [],
 ): boolean {
-  const { weekday, minutes } = zoned(now, timeZone);
+  const { weekday, minutes, date } = zoned(now, timeZone);
   const day = hours[weekday];
-  if (!day) {
+  if (!day || isClosedDate(date, closedDates)) {
     return false;
   }
   const open = parseHm(day.open);
@@ -138,12 +152,13 @@ export function nextOpenLabel(
   hours: WeekHours,
   now: Date,
   timeZone: string,
+  closedDates: readonly string[] = [],
 ): string {
   for (let offset = 0; offset < 8; offset += 1) {
     const candidate = new Date(now.getTime() + offset * 24 * 60 * 60 * 1000);
-    const { weekday, minutes } = zoned(candidate, timeZone);
+    const { weekday, minutes, date } = zoned(candidate, timeZone);
     const day = hours[weekday];
-    if (!day) {
+    if (!day || isClosedDate(date, closedDates)) {
       continue;
     }
     const open = parseHm(day.open);
@@ -163,7 +178,7 @@ export function nextOpenLabel(
 }
 
 export function noticeLine(location: LocationConfig): string {
-  return `${location.name}. Rozmowa może być nagrywana na potrzeby jakości obsługi. Jeśli się Państwo nie zgadzają, proszę powiedzieć: nie zgadzam się.`;
+  return `Dzień dobry, tu ${location.name}. Jestem asystentem AI. Rozmowa może być nagrywana na potrzeby jakości obsługi. Jeśli się Państwo nie zgadzają, proszę powiedzieć: nie zgadzam się.`;
 }
 
 function hoursLine(location: LocationConfig): string {
@@ -171,7 +186,7 @@ function hoursLine(location: LocationConfig): string {
 }
 
 function bookingLine(): string {
-  return "Nie umawiam wizyty w kalendarzu od razu — recepcja potwierdzi SMS-em. Proszę o imię i nazwisko, numer telefonu, czy byli Państwo u nas, preferowany dzień oraz krótki powód wizyty. Nie obiecuję konkretnej godziny.";
+  return "Nie umawiam wizyty w kalendarzu od razu — recepcja potwierdzi SMS-em. Proszę o imię i nazwisko, numer telefonu, czy byli Państwo u nas, preferowany dzień i porę dnia oraz czy sprawa jest pilna: tak czy nie. Nie obiecuję konkretnej godziny.";
 }
 
 export function reply(config: AppConfig, input: ScriptInput): ScriptResult {
@@ -181,8 +196,9 @@ export function reply(config: AppConfig, input: ScriptInput): ScriptResult {
   }
 
   const transcribe = input.consent !== "no";
-  const open = isOpenAt(location.hours, input.now, config.timezone);
-  const nextOpen = nextOpenLabel(location.hours, input.now, config.timezone);
+  const closedDates = location.closedDates ?? [];
+  const open = isOpenAt(location.hours, input.now, config.timezone, closedDates);
+  const nextOpen = nextOpenLabel(location.hours, input.now, config.timezone, closedDates);
 
   if (input.consent === "pending") {
     return {
