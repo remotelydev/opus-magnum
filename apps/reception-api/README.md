@@ -111,7 +111,7 @@ Edit `apps/reception-api/.env` (gitignored). Set:
 - `WHATSAPP_PHONE_NUMBER_ID=` — test Phone number ID (digits)
 - `WHATSAPP_TO=` — Bartosz’s number with country code, e.g. `+48500111222`
 
-The API loads `apps/reception-api/.env` on start (does not override vars already in the shell). Restart `dev` after editing `.env`.
+The API loads `apps/reception-api/.env` on start (does not override vars already in the shell). `dev` restarts by itself when `src/` or `.env` changes.
 
 Without credentials, the send path still builds the fixture and fails clearly. Terminal 1:
 
