@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import {
   agentFirstMessage,
   agentPrompt,
+  AVAILABILITY_TOOL,
   HOURS_TOOL,
   TICKET_CATEGORY_VALUES,
   TICKET_TOOL,
@@ -46,6 +47,7 @@ const statePath = join(
 interface AgentState {
   agentId?: string;
   hoursToolId?: string;
+  availabilityToolId?: string;
   ticketToolId?: string;
 }
 
@@ -82,6 +84,36 @@ const hoursTool = {
     url: `${publicUrl}/agent/hours/${location.id}`,
     method: "GET",
     request_headers: headers,
+  },
+};
+
+const availabilityTool = {
+  type: "webhook",
+  name: AVAILABILITY_TOOL,
+  description:
+    "Podaje najbliższe wolne terminy u lekarzy w tym gabinecie, z kopii kalendarza. To propozycje; recepcja potwierdza termin.",
+  response_timeout_secs: 10,
+  api_schema: {
+    url: `${publicUrl}/agent/availability/${location.id}`,
+    method: "GET",
+    request_headers: headers,
+    query_params_schema: {
+      properties: {
+        part: {
+          type: "string",
+          enum: ["rano", "poludnie", "popoludnie"],
+          description: "Pora dnia, jeśli pacjent ją podał.",
+        },
+        from: {
+          type: "string",
+          description: "Najwcześniejszy dzień w formacie RRRR-MM-DD, jeśli pacjent podał dzień.",
+        },
+        doctor: {
+          type: "string",
+          description: "employeeId lekarza z poprzedniej odpowiedzi, jeśli pacjent chce konkretnego lekarza.",
+        },
+      },
+    },
   },
 };
 
@@ -136,6 +168,7 @@ async function upsertTool(id: string | undefined, toolConfig: object): Promise<s
 const state = await loadState();
 state.hoursToolId = await upsertTool(state.hoursToolId, hoursTool);
 state.ticketToolId = await upsertTool(state.ticketToolId, ticketTool);
+state.availabilityToolId = await upsertTool(state.availabilityToolId, availabilityTool);
 
 const agent = {
   name: `${location.name} (test)`,
@@ -146,7 +179,7 @@ const agent = {
       prompt: {
         prompt: agentPrompt(config, location),
         llm,
-        tool_ids: [state.hoursToolId, state.ticketToolId],
+        tool_ids: [state.hoursToolId, state.availabilityToolId, state.ticketToolId],
       },
     },
     tts: {
