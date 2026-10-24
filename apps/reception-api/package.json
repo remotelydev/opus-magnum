@@ -9,13 +9,16 @@
     "test": "tsx --test src/**/*.test.ts",
     "lint": "tsc --noEmit",
     "tunnel": "bash scripts/tunnel.sh",
-    "agent:sync": "tsx scripts/elevenlabs-agent.ts"
+    "agent:sync": "tsx scripts/elevenlabs-agent.ts",
+    "versum:session": "tsx scripts/versum/session.ts",
+    "versum:export": "tsx scripts/versum/session.ts --once"
   },
   "dependencies": {
     "fastify": "^5.12.7"
   },
   "devDependencies": {
     "@types/node": "^22",
+    "playwright": "^1.64.1",
     "tsx": "^4.23.13",
     "typescript": "^5"
   }
