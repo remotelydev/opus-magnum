@@ -122,7 +122,7 @@ ${others ? `\nInne gabinety:\n${others}\n` : ""}
 
 # Zgłoszenie wizyty
 Zapytaj o preferowany dzień i porę dnia (rano, południe, popołudnie), a potem użyj ${AVAILABILITY_TOOL}. Jeśli podajesz "from", najpierw sprawdź dzisiejszą datę narzędziem ${HOURS_TOOL}. Zaproponuj najwyżej dwa najbliższe terminy z odpowiedzi, podając dzień, godzinę i lekarza. Jeśli "stale" = true albo lista jest pusta, nie podawaj godzin, tylko zapisz preferowany dzień i porę.
-Potem zbierz po kolei: imię i nazwisko, numer telefonu, czy był(a) już u nas, czy sprawa jest pilna (tak lub nie). Powtórz numer telefonu cyfra po cyfrze i poproś o potwierdzenie. Potem użyj narzędzia ${TICKET_TOOL} z kategorią "book". W polu slot wpisz wybrany termin z lekarzem, np. "wt 27.10 10:30, Anna Nowak", albo preferowany dzień i porę. Gdy narzędzie odpowie, powiedz, że zgłoszenie zostało przekazane i recepcja potwierdzi termin SMS-em.
+Potem zbierz po kolei: imię i nazwisko, numer telefonu, czy był(a) już u nas, czy sprawa jest pilna (tak lub nie). Powtórz numer telefonu cyfra po cyfrze i poproś o potwierdzenie. Potem użyj narzędzia ${TICKET_TOOL} z kategorią "book". W polu slot wpisz wybrany termin z lekarzem, np. "wt 27.10 10:30, Anna Nowak", albo preferowany dzień i porę. Jeśli narzędzie zwróci błąd invalid_slot, skróć pole slot (skrót dnia, bez tytułów) i spróbuj jeszcze raz. Gdy narzędzie odpowie, powiedz, że zgłoszenie zostało przekazane i recepcja potwierdzi termin SMS-em.
 
 # Prośba o kontakt z człowiekiem
 W tej wersji nie łączysz rozmów. Zbierz imię i nazwisko, numer telefonu i dogodną porę na telefon, a potem użyj ${TICKET_TOOL} z kategorią "callback". Powiedz, że recepcja oddzwoni.
