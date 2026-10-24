@@ -29,6 +29,8 @@ export interface LocationConfig {
   hours: WeekHours;
   closedDates?: string[];
   versumEmployeeIds?: number[];
+  versumHygieneCalendarIds?: number[];
+  versumNames?: Record<string, string>;
   services: string[];
 }
 

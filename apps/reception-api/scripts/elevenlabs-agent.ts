@@ -91,7 +91,7 @@ const availabilityTool = {
   type: "webhook",
   name: AVAILABILITY_TOOL,
   description:
-    "Podaje najbliższe wolne terminy u lekarzy w tym gabinecie, z kopii kalendarza. To propozycje; recepcja potwierdza termin.",
+    "Podaje najbliższe wolne terminy u dentystów albo higienistek w tym gabinecie, z kopii kalendarza. To propozycje; recepcja potwierdza termin.",
   response_timeout_secs: 10,
   api_schema: {
     url: `${publicUrl}/agent/availability/${location.id}`,
@@ -99,6 +99,11 @@ const availabilityTool = {
     request_headers: headers,
     query_params_schema: {
       properties: {
+        kind: {
+          type: "string",
+          enum: ["wizyta", "higienizacja"],
+          description: "wizyta = dentysta, higienizacja = higienistka (skaling, piaskowanie).",
+        },
         part: {
           type: "string",
           enum: ["rano", "poludnie", "popoludnie"],

@@ -28,7 +28,10 @@
         "saturday": { "open": "10:00", "close": "15:00" },
         "sunday": null
       },
-      "services": []
+      "services": [],
+      "versumEmployeeIds": [4280877, 4280884, 4566679, 4307909, 4542339, 4551275, 4550720, 4562886, 4394297, 4563782, 4456794, 4549283, 4561091, 4578314, 4578154, 4570857],
+      "versumHygieneCalendarIds": [4562869],
+      "versumNames": { "4566679": "Karolina Trumpus" }
     },
     {
       "id": "poddebice",
@@ -46,7 +49,10 @@
         "saturday": { "open": "10:00", "close": "15:00" },
         "sunday": null
       },
-      "services": []
+      "services": [],
+      "versumEmployeeIds": [4381752, 4381753, 4381755, 4546648, 4545877, 4542344, 4462782, 4381725, 4456795, 4328339, 4525835, 4578155, 4570486, 4578644],
+      "versumHygieneCalendarIds": [4562870],
+      "versumNames": { "4578644": "Karolina Trumpus" }
     }
   ]
 }
