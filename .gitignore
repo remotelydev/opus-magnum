@@ -39,3 +39,6 @@ apps/reception-api/data/
 # cloudflared credentials / local config (never commit tokens)
 .cloudflared/
 apps/reception-api/.cloudflared/
+
+# reception-api Versum export (clinic data, never commit)
+apps/reception-api/versum-export/
