@@ -28,6 +28,7 @@ export interface LocationConfig {
   email: string;
   hours: WeekHours;
   closedDates?: string[];
+  versumEmployeeIds?: number[];
   services: string[];
 }
 

@@ -1,11 +1,14 @@
 import { timingSafeEqual } from "node:crypto";
 import type { AppConfig, LocationConfig } from "./config.js";
+import { DAY_PARTS, type AvailabilityQuery, type DayPart } from "./availability.js";
 import { isClosedDate } from "./holidays.js";
 import { hoursSummary, isOpenAt, nextOpenLabel, noticeLine } from "./script.js";
 import { TICKET_CATEGORIES, type DevTicketBody } from "./whatsapp.js";
 
 export const HOURS_TOOL = "sprawdz_godziny";
 export const TICKET_TOOL = "wyslij_zgloszenie";
+export const AVAILABILITY_TOOL = "sprawdz_wolne_terminy";
+export const DEFAULT_VISIT_MINUTES = 30;
 
 export function isValidToolSecret(header: unknown, secret: string): boolean {
   if (typeof header !== "string") {
@@ -86,6 +89,16 @@ export function agentTicketBody(locationId: string, body: unknown): DevTicketBod
   };
 }
 
+export function agentAvailabilityQuery(
+  query: Record<string, string | undefined>,
+  visitMinutes = Number(process.env.VISIT_MINUTES) || DEFAULT_VISIT_MINUTES,
+): AvailabilityQuery {
+  const part = DAY_PARTS.find((item) => item === query.part) as DayPart | undefined;
+  const fromDate = query.from && /^\d{4}-\d{2}-\d{2}$/.test(query.from) ? query.from : undefined;
+  const employeeId = query.doctor && /^\d+$/.test(query.doctor) ? Number(query.doctor) : undefined;
+  return { durationMinutes: visitMinutes, part, fromDate, employeeId };
+}
+
 export function agentFirstMessage(location: LocationConfig): string {
   return noticeLine(location);
 }
@@ -102,13 +115,14 @@ export function agentPrompt(config: AppConfig, location: LocationConfig): string
 - Godziny: ${hoursSummary(location.hours)}. W święta państwowe gabinet jest nieczynny.
 ${others ? `\nInne gabinety:\n${others}\n` : ""}
 # Zasady
-- Nie umawiasz wizyt w kalendarzu i nie obiecujesz konkretnej godziny. Przyjmujesz zgłoszenie, a recepcja potwierdzi termin SMS-em.
+- Nie umawiasz wizyt w kalendarzu. Możesz zaproponować wolny termin z narzędzia ${AVAILABILITY_TOOL}, ale zawsze mów, że to propozycja, a recepcja potwierdzi termin SMS-em.
 - Nie stawiasz diagnoz i nie udzielasz porad medycznych. Nie pytasz o powód wizyty ani o objawy. Jeśli rozmówca sam je opisze, nie powtarzaj ich i nie zapisuj w zgłoszeniu.
 - Zanim powiesz, czy gabinet jest teraz otwarty albo kiedy będzie otwarty, zawsze użyj narzędzia ${HOURS_TOOL}. Nie zgaduj dat ani godzin.
 - Jeśli rozmówca powie "nie zgadzam się" na nagrywanie, potwierdź to jednym zdaniem i rozmawiaj dalej.
 
 # Zgłoszenie wizyty
-Zbierz po kolei: imię i nazwisko, numer telefonu, czy był(a) już u nas, preferowany dzień i porę dnia, czy sprawa jest pilna (tak lub nie). Powtórz numer telefonu cyfra po cyfrze i poproś o potwierdzenie. Potem użyj narzędzia ${TICKET_TOOL} z kategorią "book". Gdy narzędzie odpowie, powiedz, że zgłoszenie zostało przekazane i recepcja potwierdzi termin SMS-em.
+Zapytaj o preferowany dzień i porę dnia (rano, południe, popołudnie), a potem użyj ${AVAILABILITY_TOOL}. Jeśli podajesz "from", najpierw sprawdź dzisiejszą datę narzędziem ${HOURS_TOOL}. Zaproponuj najwyżej dwa najbliższe terminy z odpowiedzi, podając dzień, godzinę i lekarza. Jeśli "stale" = true albo lista jest pusta, nie podawaj godzin, tylko zapisz preferowany dzień i porę.
+Potem zbierz po kolei: imię i nazwisko, numer telefonu, czy był(a) już u nas, czy sprawa jest pilna (tak lub nie). Powtórz numer telefonu cyfra po cyfrze i poproś o potwierdzenie. Potem użyj narzędzia ${TICKET_TOOL} z kategorią "book". W polu slot wpisz wybrany termin z lekarzem, np. "wt 27.10 10:30, Anna Nowak", albo preferowany dzień i porę. Gdy narzędzie odpowie, powiedz, że zgłoszenie zostało przekazane i recepcja potwierdzi termin SMS-em.
 
 # Prośba o kontakt z człowiekiem
 W tej wersji nie łączysz rozmów. Zbierz imię i nazwisko, numer telefonu i dogodną porę na telefon, a potem użyj ${TICKET_TOOL} z kategorią "callback". Powiedz, że recepcja oddzwoni.

@@ -1,7 +1,8 @@
 import Fastify from "fastify";
 import { findLocation, loadConfig } from "./config.js";
 import { loadLocalEnv } from "./env.js";
-import { agentTicketBody, hoursAnswer, isValidToolSecret } from "./agent.js";
+import { agentAvailabilityQuery, agentTicketBody, hoursAnswer, isValidToolSecret } from "./agent.js";
+import { findFreeSlots, loadVersumCalendar, type VersumCalendar } from "./availability.js";
 import { getCachedPricelist } from "./prismic.js";
 import {
   createTranscriptStore,
@@ -356,6 +357,24 @@ app.register(async (agentScope) => {
     }
     return hoursAnswer(config, location);
   });
+
+  agentScope.get<{ Params: { site: string }; Querystring: Record<string, string | undefined> }>(
+    "/agent/availability/:site",
+    async (request, reply) => {
+      const location = findLocation(config, request.params.site);
+      if (!location) {
+        return reply.code(404).send({ error: "unknown_location" });
+      }
+      let calendar: VersumCalendar;
+      try {
+        calendar = loadVersumCalendar();
+      } catch (error) {
+        requestLog(error);
+        return reply.code(503).send({ error: "no_versum_export" });
+      }
+      return findFreeSlots(calendar, location, agentAvailabilityQuery(request.query), config.timezone);
+    },
+  );
 
   agentScope.post<{ Params: { site: string } }>("/agent/ticket/:site", async (request, reply) => {
     let ticket: BookingTicket;

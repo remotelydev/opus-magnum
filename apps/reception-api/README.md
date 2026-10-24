@@ -246,3 +246,14 @@ pnpm --filter reception-api agent:sync https://<tunnel host>
 The script prints the agent's page; use its test call button to talk to it. A booking ends with a ticket on WhatsApp. It keeps the agent and tool ids in `data/elevenlabs-<site>.json`, so running it again updates the same agent. Run it again whenever the prompt changes or the quick tunnel URL changes.
 
 The prompt is built in `src/agent.ts`. Test callers only: real patient calls wait for the EU residency and zero retention answer (plan step 13).
+
+## Free slots (Versum copy)
+
+`GET /agent/availability/:site` reads `versum-export/` (from `versum:export`) and returns the earliest free slots per doctor: open grafik windows minus occupied slots, from 2 h after now, on a 15-minute grid, skipping public holidays and `closedDates`. Optional query: `part` (`rano`, `poludnie`, `popoludnie`), `from` (`YYYY-MM-DD`), `doctor` (Versum employee id). Same `x-agent-secret` header as the other agent tools.
+
+- Visit length: `VISIT_MINUTES` in `.env` (default 30).
+- Which doctors: every employee with a calendar whose Versum name ends with the site, unless the site in `config/default.json` has `versumEmployeeIds`.
+- `stale: true` when the copy is older than 24 h; the agent then gives no times.
+- `VERSUM_EXPORT_DIR` moves the folder.
+
+The agent only proposes a time. Staff still book it in Versum and confirm by SMS. Re-run `agent:sync` to add the `sprawdz_wolne_terminy` tool to the agent.
