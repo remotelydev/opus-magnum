@@ -5,9 +5,13 @@ import { findFreeSlots, slotLabel, type VersumCalendar } from "./availability.js
 import { loadConfig } from "./config.js";
 
 const config = loadConfig();
-const turek = config.locations.find((item) => item.id === "turek");
-const poddebice = config.locations.find((item) => item.id === "poddebice");
-assert.ok(turek && poddebice);
+const withoutAllowlist = (id: string) => {
+  const location = config.locations.find((item) => item.id === id);
+  assert.ok(location);
+  return { ...location, versumEmployeeIds: undefined };
+};
+const turek = withoutAllowlist("turek");
+const poddebice = withoutAllowlist("poddebice");
 
 const now = new Date("2026-11-02T07:00:00.000Z");
 
