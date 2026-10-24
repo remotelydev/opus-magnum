@@ -124,9 +124,14 @@ describe("booking ticket", () => {
     assert.throws(() => buildDevTicket(config, { phone: "abc" }, mondayOpen), /invalid_phone/);
     assert.throws(() => buildDevTicket(config, { name: "  " }, mondayOpen), /invalid_name/);
     assert.throws(
-      () => buildDevTicket(config, { slot: "x".repeat(41) }, mondayOpen),
+      () => buildDevTicket(config, { slot: "x".repeat(81) }, mondayOpen),
       /invalid_slot/,
     );
+  });
+
+  it("accepts a full weekday and a doctor's full name in the slot", () => {
+    const slot = "poniedziałek 26.10 15:00, Katarzyna Wiśniewska-Zielińska";
+    assert.equal(buildDevTicket(config, { slot }, mondayOpen).slot, slot);
   });
 
   it("keeps the ticket on one line", () => {

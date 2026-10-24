@@ -144,7 +144,7 @@ const ticketTool = {
         },
         slot: {
           type: "string",
-          description: "Preferowany dzień i pora dnia, np. 'wtorek rano'. Najwyżej 40 znaków.",
+          description: "Wybrany termin z lekarzem, np. 'wt 27.10 10:30, Anna Nowak', albo preferowany dzień i pora dnia. Najwyżej 80 znaków.",
         },
         urgent: { type: "boolean", description: "Czy sprawa jest pilna." },
         returning: {
