@@ -177,12 +177,16 @@ export function nextOpenLabel(
   return "w godzinach otwarcia";
 }
 
+export function spokenName(location: Pick<LocationConfig, "name">): string {
+  return location.name.replace(/\+/g, "").replace(/\s+/g, " ").trim();
+}
+
 export function noticeLine(location: LocationConfig): string {
-  return `Dzień dobry, tu ${location.name}. Jestem asystentem AI. Rozmowa może być nagrywana na potrzeby jakości obsługi. Jeśli się Państwo nie zgadzają, proszę powiedzieć: nie zgadzam się.`;
+  return `Dzień dobry, tu ${spokenName(location)}. Jestem asystentem AI. Rozmowa może być nagrywana na potrzeby jakości obsługi. Jeśli się Państwo nie zgadzają, proszę powiedzieć: nie zgadzam się.`;
 }
 
 function hoursLine(location: LocationConfig): string {
-  return `${location.name}, ${location.address}. ${hoursSummary(location.hours)}. Telefon ${location.phone}.`;
+  return `${spokenName(location)}, ${location.address}. ${hoursSummary(location.hours)}. Telefon ${location.phone}.`;
 }
 
 function bookingLine(): string {

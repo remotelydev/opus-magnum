@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { LocationConfig } from "./config.js";
 import { isClosedDate } from "./holidays.js";
+import { spokenName } from "./script.js";
 
 const DEFAULT_EXPORT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "versum-export");
 const MINUTE = 60_000;
@@ -199,7 +200,7 @@ export function findFreeSlots(
   candidates.sort((a, b) => a.start.localeCompare(b.start) || a.employeeId - b.employeeId);
   const stale = now.getTime() - Date.parse(calendar.exportedAt) > STALE_AFTER_HOURS * 60 * MINUTE;
   return {
-    site: location.name,
+    site: spokenName(location),
     slots: candidates.slice(0, limit),
     exportedAt: calendar.exportedAt,
     stale,

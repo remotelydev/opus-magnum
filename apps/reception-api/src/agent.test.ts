@@ -40,6 +40,13 @@ describe("agent tools", () => {
     assert.throws(() => agentTicketBody("turek", null), /invalid_name/);
   });
 
+  it("says the clinic name without the plus sign", () => {
+    assert.match(agentFirstMessage(turek), /tu DentaPlus Turek\./);
+    assert.doesNotMatch(agentFirstMessage(turek), /DentaPlus\+/);
+    assert.doesNotMatch(agentPrompt(config, turek), /DentaPlus\+/);
+    assert.equal(hoursAnswer(config, turek).site, "DentaPlus Turek");
+  });
+
   it("turns the agent's fields into a ticket without free text", () => {
     const body = agentTicketBody("turek", {
       name: "Anna Nowak",
