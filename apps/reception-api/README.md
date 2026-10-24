@@ -253,6 +253,8 @@ The prompt is built in `src/agent.ts`. Test callers only: real patient calls wai
 
 - Visit length: `VISIT_MINUTES` in `.env` (default 30).
 - Which doctors: every employee with a calendar whose Versum name ends with the site, unless the site in `config/default.json` has `versumEmployeeIds`.
+- `kind=higienizacja` uses the site's `versumHygieneCalendarIds` (the shared "Higieny" calendar). It has no grafik in Versum, so its working time is the clinic's opening hours. Length: `HYGIENE_MINUTES` (default 60).
+- `versumNames` maps a Versum id to the name the bot says (e.g. a new surname not yet changed in Versum).
 - `stale: true` when the copy is older than 24 h; the agent then gives no times.
 - `VERSUM_EXPORT_DIR` moves the folder.
 

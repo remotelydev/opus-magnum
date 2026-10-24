@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { LocationConfig } from "./config.js";
+import type { LocationConfig, WeekHours } from "./config.js";
 import { isClosedDate } from "./holidays.js";
 import { spokenName } from "./script.js";
 
@@ -9,9 +9,22 @@ const DEFAULT_EXPORT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "
 const MINUTE = 60_000;
 const STEP_MINUTES = 15;
 export const STALE_AFTER_HOURS = 24;
+const HYGIENE_HORIZON_DAYS = 56;
+const UTC_WEEKDAYS: (keyof WeekHours)[] = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+];
 
 export const DAY_PARTS = ["rano", "poludnie", "popoludnie"] as const;
 export type DayPart = (typeof DAY_PARTS)[number];
+
+export const VISIT_KINDS = ["wizyta", "higienizacja"] as const;
+export type VisitKind = (typeof VISIT_KINDS)[number];
 
 const DAY_PART_HOURS: Record<DayPart, [number, number]> = {
   rano: [0, 12],
@@ -56,6 +69,7 @@ export interface FreeSlot {
 
 export interface AvailabilityQuery {
   durationMinutes: number;
+  kind?: VisitKind;
   part?: DayPart;
   fromDate?: string;
   employeeId?: number;
@@ -90,7 +104,15 @@ function plain(text: string): string {
   return text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 }
 
-export function siteEmployees(calendar: VersumCalendar, location: LocationConfig): VersumEmployee[] {
+export function siteEmployees(
+  calendar: VersumCalendar,
+  location: LocationConfig,
+  kind: VisitKind = "wizyta",
+): VersumEmployee[] {
+  if (kind === "higienizacja") {
+    const hygiene = location.versumHygieneCalendarIds ?? [];
+    return calendar.employees.filter((employee) => hygiene.includes(employee.id));
+  }
   const allowed = location.versumEmployeeIds;
   return calendar.employees.filter((employee) => {
     if (allowed?.length) {
@@ -125,6 +147,43 @@ export function slotLabel(instant: Date, timeZone: string): string {
   return `${weekday} ${day}.${month} ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
+function zonedInstant(date: string, time: string, timeZone: string): number {
+  const guess = Date.parse(`${date}T${time}:00Z`);
+  const offset = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" })
+    .formatToParts(new Date(guess))
+    .find((part) => part.type === "timeZoneName")?.value;
+  const match = offset?.match(/GMT([+-])(\d{2}):(\d{2})/);
+  const minutes = match ? (match[1] === "-" ? -1 : 1) * (Number(match[2]) * 60 + Number(match[3])) : 0;
+  return guess - minutes * MINUTE;
+}
+
+export function openingHourWindows(
+  location: LocationConfig,
+  employeeId: number,
+  now: Date,
+  timeZone: string,
+): VersumSchedule[] {
+  const today = zonedParts(now, timeZone).date;
+  const windows: VersumSchedule[] = [];
+  for (let offset = 0; offset < HYGIENE_HORIZON_DAYS; offset++) {
+    const date = new Date(Date.parse(`${today}T12:00:00Z`) + offset * 24 * 60 * MINUTE)
+      .toISOString()
+      .slice(0, 10);
+    const hours = location.hours[UTC_WEEKDAYS[new Date(`${date}T12:00:00Z`).getUTCDay()]];
+    if (!hours) {
+      continue;
+    }
+    windows.push({
+      employeeId,
+      date,
+      from: new Date(zonedInstant(date, hours.open, timeZone)).toISOString(),
+      to: new Date(zonedInstant(date, hours.close, timeZone)).toISOString(),
+      kind: "open",
+    });
+  }
+  return windows;
+}
+
 function inDayPart(instant: Date, durationMinutes: number, part: DayPart, timeZone: string): boolean {
   const [fromHour, toHour] = DAY_PART_HOURS[part];
   const start = zonedParts(instant, timeZone);
@@ -143,7 +202,7 @@ export function findFreeSlots(
   const earliest = now.getTime() + (query.leadMinutes ?? 120) * MINUTE;
   const limit = query.limit ?? 3;
   const closedDates = location.closedDates ?? [];
-  const doctors = siteEmployees(calendar, location).filter(
+  const doctors = siteEmployees(calendar, location, query.kind).filter(
     (employee) => query.employeeId === undefined || employee.id === query.employeeId,
   );
   const doctorById = new Map(doctors.map((employee) => [employee.id, employee]));
@@ -158,8 +217,17 @@ export function findFreeSlots(
     busyByEmployee.set(slot.employeeId, list);
   }
 
+  const windows = [...calendar.schedules];
+  if (query.kind === "higienizacja") {
+    for (const employee of doctors) {
+      if (!calendar.schedules.some((item) => item.employeeId === employee.id && item.kind === "open")) {
+        windows.push(...openingHourWindows(location, employee.id, now, timeZone));
+      }
+    }
+  }
+
   const candidates: FreeSlot[] = [];
-  for (const window of calendar.schedules) {
+  for (const window of windows) {
     const doctor = doctorById.get(window.employeeId);
     if (!doctor || window.kind !== "open") {
       continue;
@@ -191,7 +259,10 @@ export function findFreeSlots(
         start: instant.toISOString(),
         label: slotLabel(instant, timeZone),
         employeeId: doctor.id,
-        doctor: doctor.name,
+        doctor:
+          query.kind === "higienizacja"
+            ? "higienistka"
+            : (location.versumNames?.[String(doctor.id)] ?? doctor.name),
       });
       break;
     }
