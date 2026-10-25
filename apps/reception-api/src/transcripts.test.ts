@@ -8,6 +8,7 @@ import {
   createTranscriptStore,
   decryptTranscript,
   encryptTranscript,
+  schedulePurge,
   shouldWriteTranscript,
   type TranscriptRecord,
 } from "./transcripts.js";
@@ -163,5 +164,25 @@ describe("purge", () => {
 
     const remaining = await readdir(rootDir);
     assert.deepEqual(remaining, [folder32]);
+  });
+});
+
+describe("schedulePurge", () => {
+  it("purges for real right away and stops when asked", async () => {
+    const calls: boolean[] = [];
+    const stop = schedulePurge(
+      {
+        purgeOld: async (dryRun) => {
+          calls.push(dryRun);
+          return { dryRun, retentionDays: 32, today: "2026-09-12", folders: [] };
+        },
+      },
+      () => {},
+      (error) => assert.fail(String(error)),
+      60_000,
+    );
+    stop();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(calls, [false]);
   });
 });
