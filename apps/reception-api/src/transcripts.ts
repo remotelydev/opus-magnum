@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 
 export const RETENTION_DAYS = 32;
 export const TRANSCRIPT_EXT = ".json.enc";
+export const PURGE_INTERVAL_HOURS = 6;
 
 const ALGO = "aes-256-gcm";
 const IV_LENGTH = 12;
@@ -247,3 +248,16 @@ export function createTranscriptStore(options: TranscriptStoreOptions = {}) {
 }
 
 export type TranscriptStore = ReturnType<typeof createTranscriptStore>;
+
+export function schedulePurge(
+  store: Pick<TranscriptStore, "purgeOld">,
+  onResult: (result: PurgeResult) => void,
+  onError: (error: unknown) => void,
+  intervalMs = PURGE_INTERVAL_HOURS * 60 * 60 * 1000,
+): () => void {
+  const run = () => store.purgeOld(false).then(onResult, onError);
+  void run();
+  const timer = setInterval(run, intervalMs);
+  timer.unref();
+  return () => clearInterval(timer);
+}

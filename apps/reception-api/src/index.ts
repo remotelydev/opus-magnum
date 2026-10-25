@@ -7,6 +7,7 @@ import { getCachedPricelist } from "./prismic.js";
 import {
   createTranscriptStore,
   resolveTranscriptKey,
+  schedulePurge,
   RETENTION_DAYS,
   safeCallId,
   type Consent,
@@ -514,5 +515,16 @@ await app.register(async (scope) => {
 function requestLog(error: unknown) {
   app.log.error(error);
 }
+
+const stopPurge = schedulePurge(
+  store,
+  (result) => {
+    if (result.folders.length) {
+      app.log.info({ folders: result.folders }, "purged transcripts older than retention");
+    }
+  },
+  (error) => app.log.error(error, "transcript purge failed"),
+);
+app.addHook("onClose", async () => stopPurge());
 
 await app.listen({ host, port });

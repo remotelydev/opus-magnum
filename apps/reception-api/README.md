@@ -203,7 +203,7 @@ Encrypted JSON only (AES-256-GCM). No audio files. Layout under this app:
 
 `transcripts/YYYY-MM-DD/<call-id>.json.enc`
 
-Folders older than 32 days are eligible for purge. Opt-out (`consent: "no"` or `transcribe: false`) skips the write.
+Folders older than 32 days are deleted automatically: once at startup and then every 6 hours. Opt-out (`consent: "no"` or `transcribe: false`) skips the write.
 
 ```bash
 curl -s -X POST http://127.0.0.1:8788/dev/transcripts \
