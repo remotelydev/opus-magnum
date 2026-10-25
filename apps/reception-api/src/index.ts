@@ -6,6 +6,7 @@ import { findFreeSlots, loadVersumCalendar, type VersumCalendar } from "./availa
 import { getCachedPricelist } from "./prismic.js";
 import {
   createTranscriptStore,
+  resolveTranscriptKey,
   RETENTION_DAYS,
   safeCallId,
   type Consent,
@@ -51,9 +52,11 @@ const app = Fastify({
   logger: true,
 });
 
-if (!process.env.TRANSCRIPT_KEY) {
+try {
+  resolveTranscriptKey();
+} catch (error) {
   app.log.warn(
-    "TRANSCRIPT_KEY missing; POST /dev/transcripts will fail until it is set",
+    `${(error as Error).message}; transcripts will not be saved until TRANSCRIPT_KEY is fixed`,
   );
 }
 

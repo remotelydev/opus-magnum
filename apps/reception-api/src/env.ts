@@ -8,6 +8,8 @@ export function loadLocalEnv(
   if (!existsSync(path)) {
     return;
   }
+  // Variables set outside .env win; inside .env the last line wins, like `. ./.env`.
+  const preset = new Set(Object.keys(process.env));
   for (const rawLine of readFileSync(path, "utf8").split("\n")) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#")) {
@@ -25,7 +27,7 @@ export function loadLocalEnv(
     ) {
       value = value.slice(1, -1);
     }
-    if (process.env[key] === undefined) {
+    if (!preset.has(key)) {
       process.env[key] = value;
     }
   }
