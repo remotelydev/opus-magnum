@@ -14,6 +14,7 @@ import {
   type TranscriptRecord,
 } from "./transcripts.js";
 import { createTicketStore, ticketLabel } from "./tickets.js";
+import { isValidElevenLabsSignature, postCallTranscript, type PostCallEvent } from "./elevenlabs-webhook.js";
 import { resolveSmsApiEnv, sendSms } from "./smsapi.js";
 import {
   extractTextMessages,
@@ -471,6 +472,39 @@ await app.register(async (scope) => {
       }
     }
     return { ok: true };
+  });
+
+  scope.post<{ Body: Buffer }>("/webhooks/elevenlabs", async (request, reply) => {
+    const secret = process.env.ELEVENLABS_WEBHOOK_SECRET?.trim();
+    if (!secret) {
+      return reply.code(503).send({ error: "missing_webhook_secret" });
+    }
+    const signature = request.headers["elevenlabs-signature"];
+    if (
+      !Buffer.isBuffer(request.body) ||
+      !isValidElevenLabsSignature(request.body, typeof signature === "string" ? signature : undefined, secret)
+    ) {
+      return reply.code(401).send({ error: "invalid_signature" });
+    }
+    let event: PostCallEvent;
+    try {
+      event = JSON.parse(request.body.toString("utf8")) as PostCallEvent;
+    } catch {
+      return reply.code(400).send({ error: "invalid_json" });
+    }
+    const result = postCallTranscript(event);
+    if (result.kind === "ignored") {
+      return { ok: true, stored: false, reason: result.reason };
+    }
+    try {
+      const written = await store.write({ consent: result.consent, record: result.record });
+      return written.stored
+        ? { ok: true, stored: true }
+        : { ok: true, stored: false, reason: written.reason };
+    } catch (error) {
+      requestLog(error);
+      return reply.code(500).send({ error: "transcript_write_failed" });
+    }
   });
 });
 

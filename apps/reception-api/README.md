@@ -259,3 +259,9 @@ The prompt is built in `src/agent.ts`. Test callers only: real patient calls wai
 - `VERSUM_EXPORT_DIR` moves the folder.
 
 The agent only proposes a time. Staff still book it in Versum and confirm by SMS. Re-run `agent:sync` to add the `sprawdz_wolne_terminy` tool to the agent.
+
+## Bot call transcripts (ElevenLabs post-call webhook)
+
+`POST /webhooks/elevenlabs` takes ElevenLabs' `post_call_transcription` event, checks the `ElevenLabs-Signature` header (`t=…,v0=…`, HMAC-SHA256 of `t.body` with `ELEVENLABS_WEBHOOK_SECRET`, 30 min tolerance), and writes the transcript into the encrypted store above (`transcripts/YYYY-MM-DD/<conversation_id>.json.enc`, 32-day purge). Only caller and agent lines are kept; tool calls are dropped. A caller who says "nie zgadzam się" is not stored. `post_call_audio` and `call_initiation_failure` are answered 200 and ignored.
+
+Setup in ElevenLabs: ElevenAgents → Settings → Post-call webhook, URL `https://<tunnel host>/webhooks/elevenlabs`, transcript on, **audio off**. Copy the secret into `.env` as `ELEVENLABS_WEBHOOK_SECRET`.
