@@ -12,7 +12,9 @@
     "lint": {
       "dependsOn": ["^lint"]
     },
-    "test": {},
+    "test": {
+      "env": ["TEST_DATABASE_URL"]
+    },
     "storybook": {
       "cache": false,
       "persistent": true
