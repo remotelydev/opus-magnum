@@ -1,0 +1,9 @@
+@import "@opus-magnum/dentaplus-ui/styles.css";
+
+@source "./**/*.{ts,tsx}";
+
+html,
+body,
+#root {
+  height: 100%;
+}

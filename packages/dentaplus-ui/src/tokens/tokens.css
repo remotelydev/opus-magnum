@@ -1,0 +1,150 @@
+/* Generated from tokens.ts by scripts/build-tokens.ts. Do not edit by hand. */
+
+:root {
+  --dp-background: oklch(0.984 0.003 248);
+  --dp-surface: oklch(1 0 0);
+  --dp-foreground: oklch(0.208 0.042 265);
+  --dp-muted: oklch(0.968 0.007 248);
+  --dp-muted-foreground: oklch(0.554 0.046 257);
+  --dp-border: oklch(0.929 0.013 255);
+  --dp-input: oklch(0.869 0.022 252);
+  --dp-ring: oklch(0.6 0.105 185);
+  --dp-primary: oklch(0.52 0.095 186);
+  --dp-primary-foreground: oklch(1 0 0);
+  --dp-primary-soft: oklch(0.98 0.014 185);
+  --dp-destructive: oklch(0.577 0.245 27);
+  --dp-destructive-foreground: oklch(1 0 0);
+  --dp-warning: oklch(0.666 0.179 58);
+  --dp-calendar-off: oklch(0.968 0.007 248);
+  --dp-calendar-on: oklch(1 0 0);
+  --dp-status-booked: oklch(0.951 0.026 237);
+  --dp-status-booked-accent: oklch(0.588 0.158 242);
+  --dp-status-booked-foreground: oklch(0.293 0.066 243);
+  --dp-status-confirmed: oklch(0.962 0.044 157);
+  --dp-status-confirmed-accent: oklch(0.596 0.145 163);
+  --dp-status-confirmed-foreground: oklch(0.262 0.051 173);
+  --dp-status-done: oklch(0.968 0.007 248);
+  --dp-status-done-accent: oklch(0.554 0.046 257);
+  --dp-status-done-foreground: oklch(0.372 0.044 257);
+  --dp-status-no-show: oklch(0.962 0.059 95);
+  --dp-status-no-show-accent: oklch(0.666 0.179 58);
+  --dp-status-no-show-foreground: oklch(0.414 0.112 46);
+  --dp-status-cancelled: transparent;
+  --dp-status-cancelled-accent: oklch(0.704 0.04 257);
+  --dp-status-cancelled-foreground: oklch(0.554 0.046 257);
+  --dp-calendar-px-per-minute: 1.6;
+  --dp-calendar-slot-minutes: 15;
+  --dp-calendar-column-min-width: 10rem;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --dp-background: oklch(0.129 0.042 265);
+    --dp-surface: oklch(0.208 0.042 265);
+    --dp-foreground: oklch(0.968 0.007 248);
+    --dp-muted: oklch(0.279 0.041 260);
+    --dp-muted-foreground: oklch(0.704 0.04 257);
+    --dp-border: oklch(0.372 0.044 257);
+    --dp-input: oklch(0.372 0.044 257);
+    --dp-ring: oklch(0.6 0.105 185);
+    --dp-primary: oklch(0.6 0.105 185);
+    --dp-primary-foreground: oklch(0.129 0.042 265);
+    --dp-primary-soft: oklch(0.3 0.05 190);
+    --dp-destructive: oklch(0.637 0.237 25);
+    --dp-destructive-foreground: oklch(1 0 0);
+    --dp-warning: oklch(0.666 0.179 58);
+    --dp-calendar-off: oklch(0.129 0.042 265);
+    --dp-calendar-on: oklch(0.208 0.042 265);
+    --dp-status-booked: oklch(0.293 0.066 243);
+    --dp-status-booked-accent: oklch(0.588 0.158 242);
+    --dp-status-booked-foreground: oklch(0.951 0.026 237);
+    --dp-status-confirmed: oklch(0.262 0.051 173);
+    --dp-status-confirmed-accent: oklch(0.596 0.145 163);
+    --dp-status-confirmed-foreground: oklch(0.962 0.044 157);
+    --dp-status-done: oklch(0.279 0.041 260);
+    --dp-status-done-accent: oklch(0.554 0.046 257);
+    --dp-status-done-foreground: oklch(0.869 0.022 252);
+    --dp-status-no-show: oklch(0.414 0.112 46);
+    --dp-status-no-show-accent: oklch(0.666 0.179 58);
+    --dp-status-no-show-foreground: oklch(0.962 0.059 95);
+    --dp-status-cancelled: transparent;
+    --dp-status-cancelled-accent: oklch(0.554 0.046 257);
+    --dp-status-cancelled-foreground: oklch(0.704 0.04 257);
+    color-scheme: dark;
+  }
+}
+
+:root.dark {
+  --dp-background: oklch(0.129 0.042 265);
+  --dp-surface: oklch(0.208 0.042 265);
+  --dp-foreground: oklch(0.968 0.007 248);
+  --dp-muted: oklch(0.279 0.041 260);
+  --dp-muted-foreground: oklch(0.704 0.04 257);
+  --dp-border: oklch(0.372 0.044 257);
+  --dp-input: oklch(0.372 0.044 257);
+  --dp-ring: oklch(0.6 0.105 185);
+  --dp-primary: oklch(0.6 0.105 185);
+  --dp-primary-foreground: oklch(0.129 0.042 265);
+  --dp-primary-soft: oklch(0.3 0.05 190);
+  --dp-destructive: oklch(0.637 0.237 25);
+  --dp-destructive-foreground: oklch(1 0 0);
+  --dp-warning: oklch(0.666 0.179 58);
+  --dp-calendar-off: oklch(0.129 0.042 265);
+  --dp-calendar-on: oklch(0.208 0.042 265);
+  --dp-status-booked: oklch(0.293 0.066 243);
+  --dp-status-booked-accent: oklch(0.588 0.158 242);
+  --dp-status-booked-foreground: oklch(0.951 0.026 237);
+  --dp-status-confirmed: oklch(0.262 0.051 173);
+  --dp-status-confirmed-accent: oklch(0.596 0.145 163);
+  --dp-status-confirmed-foreground: oklch(0.962 0.044 157);
+  --dp-status-done: oklch(0.279 0.041 260);
+  --dp-status-done-accent: oklch(0.554 0.046 257);
+  --dp-status-done-foreground: oklch(0.869 0.022 252);
+  --dp-status-no-show: oklch(0.414 0.112 46);
+  --dp-status-no-show-accent: oklch(0.666 0.179 58);
+  --dp-status-no-show-foreground: oklch(0.962 0.059 95);
+  --dp-status-cancelled: transparent;
+  --dp-status-cancelled-accent: oklch(0.554 0.046 257);
+  --dp-status-cancelled-foreground: oklch(0.704 0.04 257);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--dp-background);
+  --color-surface: var(--dp-surface);
+  --color-foreground: var(--dp-foreground);
+  --color-muted: var(--dp-muted);
+  --color-muted-foreground: var(--dp-muted-foreground);
+  --color-border: var(--dp-border);
+  --color-input: var(--dp-input);
+  --color-ring: var(--dp-ring);
+  --color-primary: var(--dp-primary);
+  --color-primary-foreground: var(--dp-primary-foreground);
+  --color-primary-soft: var(--dp-primary-soft);
+  --color-destructive: var(--dp-destructive);
+  --color-destructive-foreground: var(--dp-destructive-foreground);
+  --color-warning: var(--dp-warning);
+  --color-calendar-off: var(--dp-calendar-off);
+  --color-calendar-on: var(--dp-calendar-on);
+  --color-status-booked: var(--dp-status-booked);
+  --color-status-booked-accent: var(--dp-status-booked-accent);
+  --color-status-booked-foreground: var(--dp-status-booked-foreground);
+  --color-status-confirmed: var(--dp-status-confirmed);
+  --color-status-confirmed-accent: var(--dp-status-confirmed-accent);
+  --color-status-confirmed-foreground: var(--dp-status-confirmed-foreground);
+  --color-status-done: var(--dp-status-done);
+  --color-status-done-accent: var(--dp-status-done-accent);
+  --color-status-done-foreground: var(--dp-status-done-foreground);
+  --color-status-no-show: var(--dp-status-no-show);
+  --color-status-no-show-accent: var(--dp-status-no-show-accent);
+  --color-status-no-show-foreground: var(--dp-status-no-show-foreground);
+  --color-status-cancelled: var(--dp-status-cancelled);
+  --color-status-cancelled-accent: var(--dp-status-cancelled-accent);
+  --color-status-cancelled-foreground: var(--dp-status-cancelled-foreground);
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}

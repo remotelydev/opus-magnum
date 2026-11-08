@@ -1,3 +1,4 @@
+import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { login, logout, ROLES, userForToken, type Role, type User } from "./auth.js";
 import { audit, type Db } from "./db.js";
@@ -78,8 +79,18 @@ const APPOINTMENT_SELECT = `
     LEFT JOIN services s ON s.id = a.service_id
     LEFT JOIN patients p ON p.id = a.patient_id`;
 
-export function buildApp(db: Db, opts: { logger?: boolean } = {}): FastifyInstance {
+export function buildApp(db: Db, opts: { logger?: boolean; webRoot?: string } = {}): FastifyInstance {
   const app = Fastify({ logger: opts.logger ?? false });
+
+  // The reception UI is a static build served by this same process: one service to run and watch.
+  if (opts.webRoot) {
+    app.register(fastifyStatic, { root: opts.webRoot });
+    app.setNotFoundHandler((req, reply) =>
+      req.method === "GET" && !req.url.startsWith("/api/")
+        ? reply.sendFile("index.html")
+        : reply.code(404).send({ error: "Nie znaleziono." }),
+    );
+  }
 
   app.decorateRequest("user", null);
   app.addHook("onRequest", async (req) => {

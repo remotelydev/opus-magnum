@@ -1,6 +1,10 @@
 # clinic
 
-Own calendar for the DentaPlus+ clinic (Turek and Poddębice), replacing Versum. Phase 1 is the backend: logins and roles, staff and sites, services, patients, working hours and appointments, with a change log. The reception UI, Versum import and SMS reminders follow.
+Own calendar for the DentaPlus+ clinic (Turek and Poddębice), replacing Versum: logins and roles, staff and sites, services, patients, working hours and appointments, with a change log, plus the reception UI (day view per site, booking, drag to move, visit details). Versum import and SMS reminders follow.
+
+- `src/`: API (Fastify + PostgreSQL).
+- `web/`: reception UI (React + Vite). Built to `web/dist` and served by the same process, so the clinic runs one service.
+- Visual components and design tokens come from `packages/dentaplus-ui`.
 
 Runs on the clinic's mini-PC next to `reception-api`. Patient data stays in the local PostgreSQL database and never goes into this repository.
 
@@ -27,7 +31,19 @@ CLINIC_PASSWORD='change-me-please' pnpm --filter clinic user:create admin admin 
 ```
 
 ```bash
+pnpm --filter clinic build
+```
+
+```bash
 pnpm --filter clinic dev
+```
+
+Open http://127.0.0.1:8790. For UI work with hot reload, run `dev` and `dev:web` side by side and open http://127.0.0.1:5174 (it proxies `/api`).
+
+Demo data (made-up patients, only on an empty database; logins `recepcja` and `admin`, password `demo-demo-demo` unless `CLINIC_PASSWORD` is set):
+
+```bash
+pnpm --filter clinic seed:demo
 ```
 
 - Health: http://127.0.0.1:8790/health
