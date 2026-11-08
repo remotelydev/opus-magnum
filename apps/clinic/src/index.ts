@@ -7,7 +7,12 @@ const WEB_DIST = fileURLToPath(new URL("../web/dist", import.meta.url));
 
 const db = createPool();
 const applied = await migrate(db);
-const app = buildApp(db, { logger: true, webRoot: existsSync(WEB_DIST) ? WEB_DIST : undefined });
+const app = buildApp(db, {
+  logger: true,
+  webRoot: existsSync(WEB_DIST) ? WEB_DIST : undefined,
+  // e.g. PUBLIC_ORIGINS=https://dentaplus.pl,https://www.dentaplus.pl
+  publicOrigins: (process.env.PUBLIC_ORIGINS ?? "").split(",").map((o) => o.trim()).filter(Boolean),
+});
 if (applied.length) app.log.info({ applied }, "migrations applied");
 
 const host = process.env.HOST ?? "127.0.0.1";

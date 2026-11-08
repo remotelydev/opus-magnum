@@ -1,6 +1,6 @@
 # clinic
 
-Own calendar for the DentaPlus+ clinic (Turek and Poddębice), replacing Versum: logins and roles, staff and sites, services, patients, working hours and appointments, with a change log, plus the reception UI (day view per site, booking, drag to move, visit details). Versum import and SMS reminders follow.
+Practice management for the DentaPlus+ clinic (Turek and Poddębice): logins and roles, staff and sites, services, patients, working hours and appointments, with a change log, plus the reception UI (day view per site, booking, drag to move, visit details). Data import and SMS reminders follow.
 
 - `src/`: API (Fastify + PostgreSQL).
 - `web/`: reception UI (React + Vite). Built to `web/dist` and served by the same process, so the clinic runs one service.
@@ -10,14 +10,18 @@ Runs on the clinic's mini-PC next to `reception-api`. Patient data stays in the 
 
 ## Run locally
 
-Needs PostgreSQL 16 (with `btree_gist`, included in the standard package).
+Needs PostgreSQL 16 (with `btree_gist`, included in the standard package). The quickest way is Docker:
+
+```bash
+docker compose -f apps/clinic/docker-compose.dev.yml up -d
+```
 
 ```bash
 pnpm install
 ```
 
 ```bash
-export DATABASE_URL=postgres://clinic:clinic@127.0.0.1:5432/clinic
+export DATABASE_URL=postgres://clinic:clinic@127.0.0.1:54329/clinic
 ```
 
 ```bash

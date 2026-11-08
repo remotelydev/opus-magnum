@@ -1,4 +1,4 @@
--- Core schema for the clinic calendar (Versum replacement, phase 1).
+-- Core schema: sites, staff, logins, services, patients, working hours, appointments, change log.
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 CREATE TABLE sites (
@@ -12,7 +12,7 @@ CREATE TABLE staff (
   name        text NOT NULL,
   kind        text NOT NULL DEFAULT 'person' CHECK (kind IN ('person', 'calendar')),
   active      boolean NOT NULL DEFAULT true,
-  versum_ids  integer[] NOT NULL DEFAULT '{}'   -- Versum duplicates one person per site
+  sort_order  integer NOT NULL DEFAULT 0
 );
 
 CREATE TABLE staff_sites (
@@ -39,14 +39,20 @@ CREATE TABLE sessions (
   expires_at  timestamptz NOT NULL
 );
 
+-- One price list for the desk, the bot and the clinic website.
 CREATE TABLE services (
   id                serial PRIMARY KEY,
   category          text NOT NULL,
   name              text NOT NULL,
+  description       text,
   duration_minutes  integer NOT NULL CHECK (duration_minutes > 0),
-  price_min         numeric(10, 2),
-  price_max         numeric(10, 2),
-  active            boolean NOT NULL DEFAULT true
+  price_min         numeric(10, 2) CHECK (price_min >= 0),
+  price_max         numeric(10, 2) CHECK (price_max >= price_min),
+  price_note        text,                         -- e.g. "za ząb", "od"
+  show_online       boolean NOT NULL DEFAULT true, -- listed on the website price list
+  sort_order        integer NOT NULL DEFAULT 0,
+  active            boolean NOT NULL DEFAULT true,
+  updated_at        timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE patients (
@@ -59,7 +65,6 @@ CREATE TABLE patients (
   medical_flags   text[] NOT NULL DEFAULT '{}',
   notes           text,
   sms_consent     boolean NOT NULL DEFAULT false,
-  versum_id       integer UNIQUE,
   created_at      timestamptz NOT NULL DEFAULT now(),
   updated_at      timestamptz NOT NULL DEFAULT now()
 );
@@ -91,7 +96,6 @@ CREATE TABLE appointments (
                 CHECK (status IN ('booked', 'confirmed', 'cancelled', 'no_show', 'done')),
   source        text NOT NULL DEFAULT 'desk' CHECK (source IN ('desk', 'bot', 'import')),
   notes         text,
-  versum_id     integer UNIQUE,
   created_by    integer REFERENCES users(id),
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now(),
@@ -104,6 +108,16 @@ CREATE TABLE appointments (
 );
 CREATE INDEX appointments_site_time_idx ON appointments (site_id, starts_at);
 CREATE INDEX appointments_patient_idx ON appointments (patient_id, starts_at);
+
+-- Links rows to ids in a data source during a one-off import (so re-running it updates instead of
+-- duplicating). Not used by the app; can be emptied or dropped once the import is finished.
+CREATE TABLE import_refs (
+  source      text NOT NULL,           -- name of the import batch / source system
+  entity      text NOT NULL,           -- "patient", "staff", "appointment", "service"
+  source_id   text NOT NULL,
+  entity_id   integer NOT NULL,
+  PRIMARY KEY (source, entity, source_id)
+);
 
 CREATE TABLE audit_log (
   id          bigserial PRIMARY KEY,

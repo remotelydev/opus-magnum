@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import { login, logout, ROLES, userForToken, type Role, type User } from "./auth.js";
 import { audit, type Db } from "./db.js";
 import { normalizePhone } from "./phone.js";
+import { registerServices } from "./services.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -79,7 +80,15 @@ const APPOINTMENT_SELECT = `
     LEFT JOIN services s ON s.id = a.service_id
     LEFT JOIN patients p ON p.id = a.patient_id`;
 
-export function buildApp(db: Db, opts: { logger?: boolean; webRoot?: string } = {}): FastifyInstance {
+export interface AppOptions {
+  logger?: boolean;
+  /** Built reception UI to serve, if any. */
+  webRoot?: string;
+  /** Origins allowed to read the public price list from a browser (the clinic website). */
+  publicOrigins?: string[];
+}
+
+export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
   const app = Fastify({ logger: opts.logger ?? false });
 
   // The reception UI is a static build served by this same process: one service to run and watch.
@@ -194,48 +203,7 @@ export function buildApp(db: Db, opts: { logger?: boolean; webRoot?: string } = 
     },
   );
 
-  app.get("/api/services", { preHandler: guard(ALL) }, async () => {
-    const { rows } = await db.query("SELECT * FROM services WHERE active ORDER BY category, name");
-    return rows.map((r) => ({
-      id: r.id,
-      category: r.category,
-      name: r.name,
-      durationMinutes: r.duration_minutes,
-      priceMin: r.price_min === null ? null : Number(r.price_min),
-      priceMax: r.price_max === null ? null : Number(r.price_max),
-    }));
-  });
-
-  app.post<{
-    Body: { category: string; name: string; durationMinutes: number; priceMin?: number; priceMax?: number };
-  }>(
-    "/api/services",
-    {
-      preHandler: guard(ADMIN),
-      schema: {
-        body: {
-          type: "object",
-          required: ["category", "name", "durationMinutes"],
-          properties: {
-            category: { type: "string", minLength: 1 },
-            name: { type: "string", minLength: 1 },
-            durationMinutes: { type: "integer", minimum: 5, maximum: 480 },
-            priceMin: { type: "number", minimum: 0 },
-            priceMax: { type: "number", minimum: 0 },
-          },
-        },
-      },
-    },
-    async (req, reply) => {
-      const b = req.body;
-      const { rows } = await db.query<{ id: number }>(
-        "INSERT INTO services (category, name, duration_minutes, price_min, price_max) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-        [b.category, b.name, b.durationMinutes, b.priceMin ?? null, b.priceMax ?? b.priceMin ?? null],
-      );
-      await audit(db, req.user!.id, "service.create", "service", rows[0].id, b);
-      return reply.code(201).send({ id: rows[0].id });
-    },
-  );
+  registerServices(app, db, { read: guard(ALL), admin: guard(ADMIN) }, opts.publicOrigins ?? []);
 
   // --- patients ---------------------------------------------------------------------------
   app.get<{ Querystring: { q?: string; limit?: number } }>(

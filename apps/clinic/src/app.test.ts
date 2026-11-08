@@ -25,7 +25,7 @@ describe("clinic API", { skip: TEST_DATABASE_URL ? false : "TEST_DATABASE_URL no
 
   before(async () => {
     db = await freshDb();
-    app = buildApp(db);
+    app = buildApp(db, { publicOrigins: ["https://dentaplus.pl"] });
     await createUser(db, { login: "admin", name: "Admin", role: "admin", password: PASSWORD });
     await createUser(db, { login: "recepcja.turek", name: "Recepcja", role: "reception", password: PASSWORD });
     await createUser(db, { login: "dr.kowalska", name: "Dr Kowalska", role: "doctor", password: PASSWORD });
@@ -65,6 +65,43 @@ describe("clinic API", { skip: TEST_DATABASE_URL ? false : "TEST_DATABASE_URL no
     const services = await call("GET", "/api/services", "recepcja.turek");
     assert.equal(services.body[0].durationMinutes, 45);
     assert.equal(services.body[0].priceMax, 400);
+  });
+
+  test("services: admin edits, bad price range refused, website list shows only public ones", async () => {
+    const hidden = await call("POST", "/api/services", "admin", {
+      category: "Zachowawcza",
+      name: "Wizyta kontrolna (wewnętrzna)",
+      durationMinutes: 15,
+      showOnline: false,
+    });
+    assert.equal(hidden.status, 201);
+    const filling = (await call("GET", "/api/services", "admin")).body.find((s: { name: string }) => s.name === "Wypełnienie");
+
+    assert.equal((await call("PATCH", `/api/services/${filling.id}`, "recepcja.turek", { priceMin: 1 })).status, 403);
+    assert.equal((await call("PATCH", `/api/services/${filling.id}`, "admin", { priceMin: 500 })).status, 400);
+    const ok = await call("PATCH", `/api/services/${filling.id}`, "admin", {
+      priceMin: 280,
+      priceNote: "za ząb",
+      description: "Wypełnienie kompozytowe",
+    });
+    assert.equal(ok.status, 200);
+    const log = await db.query("SELECT changes FROM audit_log WHERE action = 'service.update'");
+    assert.deepEqual(log.rows[0].changes.priceMin, { from: 250, to: 280 });
+
+    const res = await app.inject({ method: "GET", url: "/api/public/services", headers: { origin: "https://dentaplus.pl" } });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.headers["access-control-allow-origin"], "https://dentaplus.pl");
+    const body = res.json();
+    assert.equal(body.currency, "PLN");
+    const names = body.categories.flatMap((c: { services: { name: string }[] }) => c.services.map((s) => s.name));
+    assert.ok(names.includes("Wypełnienie"));
+    assert.ok(!names.includes("Wizyta kontrolna (wewnętrzna)"));
+    const other = await app.inject({ method: "GET", url: "/api/public/services", headers: { origin: "https://evil.example" } });
+    assert.equal(other.headers["access-control-allow-origin"], undefined);
+
+    await call("PATCH", `/api/services/${hidden.body.id}`, "admin", { active: false });
+    assert.ok(!(await call("GET", "/api/services", "admin")).body.some((s: { id: number }) => s.id === hidden.body.id));
+    assert.ok((await call("GET", "/api/services?all=true", "admin")).body.some((s: { id: number }) => s.id === hidden.body.id));
   });
 
   test("patients: phone normalised, search by name and phone, doctor cannot write", async () => {

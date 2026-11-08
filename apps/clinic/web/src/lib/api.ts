@@ -20,10 +20,16 @@ export interface Service {
   id: number;
   category: string;
   name: string;
+  description: string | null;
   durationMinutes: number;
   priceMin: number | null;
   priceMax: number | null;
+  priceNote: string | null;
+  showOnline: boolean;
+  sortOrder: number;
+  active: boolean;
 }
+export type ServiceInput = Omit<Service, "id">;
 export interface Patient {
   id: number;
   firstName: string;
@@ -95,6 +101,9 @@ export const api = {
   sites: () => request<Site[]>("GET", "/api/sites"),
   staff: () => request<Staff[]>("GET", "/api/staff"),
   services: () => request<Service[]>("GET", "/api/services"),
+  allServices: () => request<Service[]>("GET", "/api/services?all=true"),
+  createService: (body: Partial<ServiceInput>) => request<{ id: number }>("POST", "/api/services", body),
+  updateService: (id: number, body: Partial<ServiceInput>) => request<{ ok: true }>("PATCH", `/api/services/${id}`, body),
   searchPatients: (q: string) => request<Patient[]>("GET", `/api/patients?${qs({ q, limit: 15 })}`),
   patient: (id: number) => request<Patient & { appointments: Appointment[] }>("GET", `/api/patients/${id}`),
   createPatient: (body: Partial<Patient>) => request<{ id: number }>("POST", "/api/patients", body),
