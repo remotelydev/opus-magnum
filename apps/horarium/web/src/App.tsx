@@ -7,7 +7,7 @@ import { Login } from "./components/Login.tsx";
 import { api, ApiError, type Service, type Site, type Staff, type User } from "./lib/api.ts";
 import { addDays, formatDay, todayInClinic } from "./lib/time.ts";
 
-const SITE_KEY = "clinic.site";
+const SITE_KEY = "horarium.site";
 
 function readSite(): string | null {
   try {
@@ -69,7 +69,8 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   return (
     <div className="flex h-full flex-col bg-background text-foreground">
       <header className="flex flex-wrap items-center gap-3 border-b border-border bg-surface px-4 py-2">
-        <strong className="text-sm text-primary">DentaPlus+</strong>
+        <strong className="text-sm text-primary">Horarium</strong>
+        <span className="-ml-2 text-xs text-muted-foreground">DentaPlus+</span>
         <nav className="mr-2 flex gap-1" aria-label="Sekcje">
           <Button variant={view === "calendar" ? "primary" : "ghost"} size="sm" onClick={() => setView("calendar")}>
             Terminarz

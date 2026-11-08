@@ -1,4 +1,6 @@
-# clinic
+# Horarium
+
+*Horarium*: the medieval monastic timetable of the hours of the day.
 
 Practice management for the DentaPlus+ clinic (Turek and Poddębice): logins and roles, staff and sites, services, patients, working hours and appointments, with a change log, plus the reception UI (day view per site, booking, drag to move, visit details). Data import and SMS reminders follow.
 
@@ -13,7 +15,7 @@ Runs on the clinic's mini-PC next to `reception-api`. Patient data stays in the 
 Needs PostgreSQL 16 (with `btree_gist`, included in the standard package). The quickest way is Docker:
 
 ```bash
-docker compose -f apps/clinic/docker-compose.dev.yml up -d
+docker compose -f apps/horarium/docker-compose.dev.yml up -d
 ```
 
 ```bash
@@ -21,25 +23,25 @@ pnpm install
 ```
 
 ```bash
-export DATABASE_URL=postgres://clinic:clinic@127.0.0.1:54329/clinic
+export DATABASE_URL=postgres://horarium:horarium@127.0.0.1:54329/horarium
 ```
 
 ```bash
-pnpm --filter clinic migrate
+pnpm --filter horarium migrate
 ```
 
 Create the first admin login (password from the environment, at least 10 characters):
 
 ```bash
-CLINIC_PASSWORD='change-me-please' pnpm --filter clinic user:create admin admin "Administrator"
+CLINIC_PASSWORD='change-me-please' pnpm --filter horarium user:create admin admin "Administrator"
 ```
 
 ```bash
-pnpm --filter clinic build
+pnpm --filter horarium build
 ```
 
 ```bash
-pnpm --filter clinic dev
+pnpm --filter horarium dev
 ```
 
 Open http://127.0.0.1:8790. For UI work with hot reload, run `dev` and `dev:web` side by side and open http://127.0.0.1:5174 (it proxies `/api`).
@@ -47,7 +49,7 @@ Open http://127.0.0.1:8790. For UI work with hot reload, run `dev` and `dev:web`
 Demo data (made-up patients, only on an empty database; logins `recepcja` and `admin`, password `demo-demo-demo` unless `CLINIC_PASSWORD` is set):
 
 ```bash
-pnpm --filter clinic seed:demo
+pnpm --filter horarium seed:demo
 ```
 
 - Health: http://127.0.0.1:8790/health
@@ -58,7 +60,7 @@ pnpm --filter clinic seed:demo
 Tests need an empty database they can wipe:
 
 ```bash
-TEST_DATABASE_URL=postgres://clinic:clinic@127.0.0.1:5432/clinic_test pnpm --filter clinic test
+TEST_DATABASE_URL=postgres://horarium:horarium@127.0.0.1:5432/horarium_test pnpm --filter horarium test
 ```
 
 Without `TEST_DATABASE_URL` the API tests are skipped. CI runs them against a Postgres service.

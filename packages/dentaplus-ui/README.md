@@ -1,6 +1,6 @@
 # @opus-magnum/dentaplus-ui
 
-DentaPlus+ design system: design tokens and React components for the clinic apps (`apps/clinic`).
+DentaPlus+ design system: design tokens and React components for the clinic apps (`apps/horarium`).
 
 - `src/tokens/tokens.ts`: the source of truth. Palette, semantic colours (light and dark), appointment status colours, radius, fonts, calendar geometry.
 - `src/tokens/tokens.css`: generated CSS variables (`--dp-*`) and the Tailwind v4 theme mapping. Do not edit by hand; regenerate after changing `tokens.ts`:

@@ -1,5 +1,5 @@
 // Fills an EMPTY database with made-up demo data (no real patients) for development and screenshots.
-//   DATABASE_URL=... pnpm --filter clinic seed:demo
+//   DATABASE_URL=... pnpm --filter horarium seed:demo
 import { createUser } from "../src/auth.js";
 import { createPool, migrate } from "../src/db.js";
 

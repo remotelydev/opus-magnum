@@ -26,7 +26,7 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
   return (
     <main className="flex h-full items-center justify-center bg-background p-4">
       <form onSubmit={submit} className="w-full max-w-xs space-y-4 rounded-lg border border-border bg-surface p-6 shadow-sm">
-        <h1 className="text-lg font-semibold text-primary">DentaPlus+ · Terminarz</h1>
+        <h1 className="text-lg font-semibold text-primary">Horarium · DentaPlus+</h1>
         <div className="space-y-1">
           <Label htmlFor="login">Login</Label>
           <Input id="login" autoComplete="username" value={login} onChange={(e) => setLogin(e.target.value)} autoFocus />

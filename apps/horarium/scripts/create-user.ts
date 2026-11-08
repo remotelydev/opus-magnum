@@ -1,6 +1,6 @@
 // Create a login. The password is read from the CLINIC_PASSWORD env var so it does not
 // land in shell history as an argument.
-//   CLINIC_PASSWORD=... pnpm --filter clinic user:create <login> <role> "<Full name>"
+//   CLINIC_PASSWORD=... pnpm --filter horarium user:create <login> <role> "<Full name>"
 import { createUser, ROLES, type Role } from "../src/auth.js";
 import { createPool, migrate } from "../src/db.js";
 

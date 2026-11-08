@@ -8,7 +8,7 @@ import { freshDb, TEST_DATABASE_URL } from "./test-db.js";
 
 const PASSWORD = "correct-horse-battery";
 
-describe("clinic API", { skip: TEST_DATABASE_URL ? false : "TEST_DATABASE_URL not set" }, () => {
+describe("horarium API", { skip: TEST_DATABASE_URL ? false : "TEST_DATABASE_URL not set" }, () => {
   let db: Db;
   let app: FastifyInstance;
   const tokens: Record<string, string> = {};

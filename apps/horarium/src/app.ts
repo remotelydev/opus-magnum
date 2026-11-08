@@ -119,7 +119,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     return reply.code(status).send({ error: status >= 500 ? "Błąd serwera." : (error as Error).message });
   });
 
-  app.get("/health", async () => ({ ok: true, service: "clinic" }));
+  app.get("/health", async () => ({ ok: true, service: "horarium" }));
 
   // --- auth -------------------------------------------------------------------------------
   app.post<{ Body: { login: string; password: string } }>(
