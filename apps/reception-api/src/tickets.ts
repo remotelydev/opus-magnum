@@ -41,8 +41,9 @@ export interface TicketStore {
   hasReply(replyMessageId: string): Promise<boolean>;
 }
 
-export function createTicketStore(options: { dir?: string } = {}): TicketStore {
+export function createTicketStore(options: { dir?: string; now?: () => Date } = {}): TicketStore {
   const dir = options.dir ?? ticketsDir();
+  const clock = options.now ?? (() => new Date());
   const path = join(dir, "tickets.json");
   let queue: Promise<unknown> = Promise.resolve();
 
@@ -77,7 +78,7 @@ export function createTicketStore(options: { dir?: string } = {}): TicketStore {
       return locked(async () => {
         const file = await load();
         file.lastNumber += 1;
-        await store(file, new Date());
+        await store(file, clock());
         return file.lastNumber;
       });
     },
@@ -90,7 +91,7 @@ export function createTicketStore(options: { dir?: string } = {}): TicketStore {
         } else {
           file.tickets.push(record);
         }
-        await store(file, new Date());
+        await store(file, clock());
       });
     },
     findByMessageId(messageId) {

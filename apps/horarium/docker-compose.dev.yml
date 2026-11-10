@@ -1,0 +1,15 @@
+# Local PostgreSQL for development only. Production setup is separate (see docs).
+#   docker compose -f docker-compose.dev.yml up -d
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: horarium
+      POSTGRES_PASSWORD: horarium
+      POSTGRES_DB: horarium
+    ports:
+      - "127.0.0.1:54329:5432"
+    volumes:
+      - horarium-dev-db:/var/lib/postgresql/data
+volumes:
+  horarium-dev-db:

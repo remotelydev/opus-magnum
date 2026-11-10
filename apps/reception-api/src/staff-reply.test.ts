@@ -126,7 +126,7 @@ describe("webhook security", () => {
 describe("handleStaffMessage", () => {
   async function setup() {
     const dir = await mkdtemp(join(tmpdir(), "tickets-"));
-    const store = createTicketStore({ dir });
+    const store = createTicketStore({ dir, now: () => NOW });
     const number = await store.nextNumber();
     const ticket: TicketRecord = {
       number,
