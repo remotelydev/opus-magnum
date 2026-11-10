@@ -72,7 +72,8 @@ Without `TEST_DATABASE_URL` the API tests are skipped. CI runs them against a Po
 | POST | `/api/auth/login`, `/api/auth/logout` | anyone |
 | GET | `/api/me`, `/api/sites`, `/api/staff`, `/api/services` | any login |
 | POST | `/api/staff`, `/api/services` | admin |
-| GET | `/api/patients?q=` (name prefix or phone), `/api/patients/:id` (with visits) | any login |
+| GET | `/api/patients?q=` (name prefix or phone; no notes or medical flags), `/api/patients/:id` (full card with visits) | any login |
+| GET | `/api/patients/:id/history` (change log of the patient and their visits) | admin |
 | POST / PATCH | `/api/patients`, `/api/patients/:id` | admin, reception |
 | GET | `/api/schedules?site=&from=&to=` | any login |
 | POST / DELETE | `/api/schedules`, `/api/schedules/:id` | admin, reception |
@@ -83,5 +84,7 @@ Rules built in:
 - One staff member cannot have two live appointments at the same time (database constraint, answers 409). Cancelled and no-show visits free the slot.
 - A visit without an end time takes the service duration. A move keeps the visit length.
 - Booking outside the working hours, at the wrong site or during an absence is allowed but returns `warnings`, as reception sometimes needs it.
-- Every write goes to `audit_log`. Patient edits log only the field names, not medical content.
+- Every write goes to `audit_log`, and so does every opening of a patient card (`patient.view`). Patient edits log only the field names, not medical content. Admins see a patient's log under "Historia zmian" in the visit panel.
+- Logins: after 5 failed attempts for one login from one address (or 20 from one address) within 15 minutes, further attempts get 429 until the window passes. Failed attempts are logged as `auth.failed`.
+- Request logs keep only the path, never the query string, so patient searches do not end up in log files.
 - Phone numbers are stored as E.164 (`+48…`), so the bot can match callers.

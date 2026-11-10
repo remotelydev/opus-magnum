@@ -130,6 +130,7 @@ export function registerServices(
       const before = toService(current);
       checkPrices(b.priceMin === undefined ? before.priceMin : b.priceMin, b.priceMax === undefined ? before.priceMax : b.priceMax);
       const keys = (Object.keys(b) as (keyof typeof COLUMNS)[]).filter((k) => k in COLUMNS);
+      if (!keys.length) throw badRequest("Brak pól do zmiany.");
       await db.query(
         `UPDATE services SET ${keys.map((k, i) => `${COLUMNS[k]} = $${i + 2}`).join(", ")}, updated_at = now() WHERE id = $1`,
         [req.params.id, ...keys.map((k) => b[k])],

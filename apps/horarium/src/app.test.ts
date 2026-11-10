@@ -3,6 +3,7 @@ import { after, before, describe, test } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "./app.js";
 import { createUser } from "./auth.js";
+import { createLoginLimiter } from "./login-limit.js";
 import type { Db } from "./db.js";
 import { freshDb, TEST_DATABASE_URL } from "./test-db.js";
 
@@ -124,11 +125,17 @@ describe("horarium API", { skip: TEST_DATABASE_URL ? false : "TEST_DATABASE_URL 
     assert.equal(byPhone.body[0].phone, "+48600100200");
     const byName = await call("GET", "/api/patients?q=testowy", "recepcja.turek");
     assert.equal(byName.body[0].id, created.body.id);
+    // Search results carry no medical content; the full card does.
+    assert.equal(byName.body[0].medicalFlags, undefined);
+    assert.equal(byName.body[0].notes, undefined);
 
     const patched = await call("PATCH", `/api/patients/${created.body.id}`, "recepcja.turek", { notes: "alergia" });
     assert.equal(patched.status, 200);
     const log = await db.query("SELECT changes FROM audit_log WHERE action = 'patient.update'");
     assert.deepEqual(log.rows[0].changes, { fields: ["notes"] });
+
+    const unknownOnly = await call("PATCH", `/api/patients/${created.body.id}`, "recepcja.turek", { shoeSize: 42 });
+    assert.equal(unknownOnly.status, 400);
   });
 
   test("appointments: duration from service, overlap blocked, cancel frees the slot, move keeps length", async () => {
@@ -202,5 +209,33 @@ describe("horarium API", { skip: TEST_DATABASE_URL ? false : "TEST_DATABASE_URL 
 
     const card = await call("GET", `/api/patients/${patientId}`, "dr.kowalska");
     assert.equal(card.body.appointments.length, 2);
+    assert.deepEqual(card.body.medicalFlags, ["cukrzyca"]);
+  });
+
+  test("patient history: edits, card views and visit changes, admin only", async () => {
+    const patientId = (await call("GET", "/api/patients?q=testowy", "admin")).body[0].id;
+    assert.equal((await call("GET", `/api/patients/${patientId}/history`, "recepcja.turek")).status, 403);
+    const history = await call("GET", `/api/patients/${patientId}/history`, "admin");
+    assert.equal(history.status, 200);
+    const actions = history.body.map((e: { action: string }) => e.action);
+    for (const action of ["patient.create", "patient.update", "patient.view", "appointment.create", "appointment.update"]) {
+      assert.ok(actions.includes(action), action);
+    }
+    const view = history.body.find((e: { action: string }) => e.action === "patient.view");
+    assert.equal(view.userName, "Dr Kowalska");
+  });
+
+  test("failed logins are limited and logged", async () => {
+    const limited = buildApp(db, { loginLimiter: createLoginLimiter({ maxPerLogin: 2 }) });
+    const attempt = (password: string) =>
+      limited.inject({ method: "POST", url: "/api/auth/login", payload: { login: "admin", password } });
+    assert.equal((await attempt("wrong-1")).statusCode, 401);
+    assert.equal((await attempt("wrong-2")).statusCode, 401);
+    const blocked = await attempt(PASSWORD);
+    assert.equal(blocked.statusCode, 429);
+    assert.ok(Number(blocked.headers["retry-after"]) > 0);
+    const failed = await db.query("SELECT entity_id FROM audit_log WHERE action = 'auth.failed'");
+    assert.ok(failed.rows.some((r) => r.entity_id === "admin"));
+    await limited.close();
   });
 });

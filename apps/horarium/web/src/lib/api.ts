@@ -41,6 +41,17 @@ export interface Patient {
   notes: string | null;
   smsConsent: boolean;
 }
+/** What the patient search returns: no notes or medical flags. */
+export type PatientSummary = Pick<Patient, "id" | "firstName" | "lastName" | "phone" | "birthDate">;
+export interface HistoryEntry {
+  id: number;
+  at: string;
+  action: string;
+  entity: "patient" | "appointment";
+  entityId: string;
+  changes: Record<string, unknown> | null;
+  userName: string | null;
+}
 export type AppointmentStatus = "booked" | "confirmed" | "cancelled" | "no_show" | "done";
 export interface Appointment {
   id: number;
@@ -104,8 +115,9 @@ export const api = {
   allServices: () => request<Service[]>("GET", "/api/services?all=true"),
   createService: (body: Partial<ServiceInput>) => request<{ id: number }>("POST", "/api/services", body),
   updateService: (id: number, body: Partial<ServiceInput>) => request<{ ok: true }>("PATCH", `/api/services/${id}`, body),
-  searchPatients: (q: string) => request<Patient[]>("GET", `/api/patients?${qs({ q, limit: 15 })}`),
+  searchPatients: (q: string) => request<PatientSummary[]>("GET", `/api/patients?${qs({ q, limit: 15 })}`),
   patient: (id: number) => request<Patient & { appointments: Appointment[] }>("GET", `/api/patients/${id}`),
+  patientHistory: (id: number) => request<HistoryEntry[]>("GET", `/api/patients/${id}/history`),
   createPatient: (body: Partial<Patient>) => request<{ id: number }>("POST", "/api/patients", body),
   appointments: (site: string, from: string, to: string) =>
     request<Appointment[]>("GET", `/api/appointments?${qs({ site, from, to })}`),

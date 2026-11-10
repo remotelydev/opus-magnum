@@ -2,6 +2,7 @@ import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { login, logout, ROLES, userForToken, type Role, type User } from "./auth.js";
 import { audit, type Db } from "./db.js";
+import { createLoginLimiter, type LoginLimiter } from "./login-limit.js";
 import { normalizePhone } from "./phone.js";
 import { registerServices } from "./services.js";
 
@@ -55,6 +56,21 @@ function patientRow(r: Record<string, unknown>) {
   };
 }
 
+/** Search results: enough to pick the right person. Notes and medical flags only come with the full card. */
+function patientSummary(r: Record<string, unknown>) {
+  return {
+    id: r.id,
+    firstName: r.first_name,
+    lastName: r.last_name,
+    phone: r.phone,
+    birthDate: r.birth_date,
+  };
+}
+
+function noFields(): never {
+  throw Object.assign(new Error("Brak pól do zmiany."), { statusCode: 400 });
+}
+
 function appointmentRow(r: Record<string, unknown>) {
   return {
     id: r.id,
@@ -86,10 +102,22 @@ export interface AppOptions {
   webRoot?: string;
   /** Origins allowed to read the public price list from a browser (the clinic website). */
   publicOrigins?: string[];
+  /** Failed-login limiter; tests pass their own. */
+  loginLimiter?: LoginLimiter;
 }
 
+// Request logs keep the path only: search queries (?q=surname or phone) must not land in log files.
+const LOG_SERIALIZERS = {
+  req: (req: { method: string; url: string; ip?: string }) => ({
+    method: req.method,
+    url: req.url.split("?")[0],
+    remoteAddress: req.ip,
+  }),
+};
+
 export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
-  const app = Fastify({ logger: opts.logger ?? false });
+  const app = Fastify({ logger: opts.logger ? { serializers: LOG_SERIALIZERS } : false });
+  const limiter = opts.loginLimiter ?? createLoginLimiter();
 
   // The reception UI is a static build served by this same process: one service to run and watch.
   if (opts.webRoot) {
@@ -134,8 +162,20 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
       },
     },
     async (req, reply) => {
+      const wait = limiter.retryAfter(req.ip, req.body.login);
+      if (wait) {
+        reply.header("retry-after", String(wait));
+        return reply
+          .code(429)
+          .send({ error: `Za dużo nieudanych prób. Spróbuj za ${Math.ceil(wait / 60)} min.` });
+      }
       const result = await login(db, req.body.login, req.body.password);
-      if (!result) return reply.code(401).send({ error: "Zły login lub hasło." });
+      if (!result) {
+        limiter.fail(req.ip, req.body.login);
+        await audit(db, null, "auth.failed", "login", req.body.login.toLowerCase().slice(0, 64), { ip: req.ip });
+        return reply.code(401).send({ error: "Zły login lub hasło." });
+      }
+      limiter.succeed(req.ip, req.body.login);
       await audit(db, result.user.id, "auth.login", "user", result.user.id);
       reply.header("set-cookie", `session=${result.token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200`);
       return result;
@@ -230,7 +270,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
           ORDER BY last_name, first_name LIMIT $3`,
         [phone, `${q.toLowerCase()}%`, limit],
       );
-      return rows.map(patientRow);
+      return rows.map(patientSummary);
     },
   );
 
@@ -240,6 +280,8 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     async (req, reply) => {
       const { rows } = await db.query("SELECT * FROM patients WHERE id = $1", [req.params.id]);
       if (!rows[0]) return reply.code(404).send({ error: "Nie ma takiego pacjenta." });
+      // Opening a card is logged too: who looked at which patient's data, and when.
+      await audit(db, req.user!.id, "patient.view", "patient", req.params.id);
       const visits = await db.query(`${APPOINTMENT_SELECT} WHERE a.patient_id = $1 ORDER BY a.starts_at DESC`, [
         req.params.id,
       ]);
@@ -319,6 +361,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     async (req, reply) => {
       const body = cleanPatient(req.body);
       const keys = Object.keys(body).filter((k) => k in patientColumns) as (keyof PatientBody)[];
+      if (!keys.length) noFields();
       const { rowCount } = await db.query(
         `UPDATE patients SET ${keys.map((k, i) => `${patientColumns[k]} = $${i + 2}`).join(", ")}, updated_at = now()
           WHERE id = $1`,
@@ -328,6 +371,33 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
       // Field names only: the change log must not copy medical content around.
       await audit(db, req.user!.id, "patient.update", "patient", req.params.id, { fields: keys });
       return { ok: true };
+    },
+  );
+
+  // Change log of one patient: edits and views of the card, plus changes to their visits. Admin only.
+  app.get<{ Params: { id: number } }>(
+    "/api/patients/:id/history",
+    { preHandler: guard(ADMIN), schema: { params: { type: "object", properties: { id: { type: "integer" } } } } },
+    async (req) => {
+      const { rows } = await db.query(
+        `SELECT l.id, l.at, l.action, l.entity, l.entity_id, l.changes, u.name AS user_name
+           FROM audit_log l LEFT JOIN users u ON u.id = l.user_id
+          WHERE (l.entity = 'patient' AND l.entity_id = $1)
+             OR (l.entity = 'appointment'
+                 AND l.entity_id IN (SELECT id::text FROM appointments WHERE patient_id = $2))
+          ORDER BY l.at DESC, l.id DESC
+          LIMIT 200`,
+        [String(req.params.id), req.params.id],
+      );
+      return rows.map((r) => ({
+        id: Number(r.id),
+        at: (r.at as Date).toISOString(),
+        action: r.action,
+        entity: r.entity,
+        entityId: r.entity_id,
+        changes: r.changes,
+        userName: r.user_name,
+      }));
     },
   );
 
