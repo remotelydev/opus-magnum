@@ -1,7 +1,7 @@
 import { Button } from "@opus-magnum/dentaplus-ui/components/button";
 import { Input, Label, Select } from "@opus-magnum/dentaplus-ui/components/field";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { api, type Patient, type Service, type Staff } from "../lib/api.ts";
+import { api, type Patient, type PatientSummary, type Service, type Staff } from "../lib/api.ts";
 import { formatMinutes, fromClinicTime, parseHhmm } from "../lib/time.ts";
 import { Modal } from "@opus-magnum/dentaplus-ui/components/modal";
 
@@ -212,7 +212,7 @@ function PatientPicker({
   onCreate: () => void;
 }) {
   const [q, setQ] = useState("");
-  const [results, setResults] = useState<Patient[]>([]);
+  const [results, setResults] = useState<PatientSummary[]>([]);
 
   useEffect(() => {
     if (q.trim().length < 2) {
@@ -268,7 +268,13 @@ function PatientPicker({
               <button
                 type="button"
                 className="w-full px-3 py-1.5 text-left hover:bg-muted"
-                onClick={() => onPick(p)}
+                // Pick loads the full card, so reception sees medical flags before booking.
+                onClick={() =>
+                  api
+                    .patient(p.id)
+                    .then(onPick)
+                    .catch(() => onPick({ ...p, email: null, medicalFlags: [], notes: null, smsConsent: false }))
+                }
               >
                 {p.lastName} {p.firstName} <span className="text-muted-foreground">{p.phone}</span>
               </button>

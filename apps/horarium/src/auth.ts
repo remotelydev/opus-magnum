@@ -32,6 +32,10 @@ export async function verifyPassword(password: string, stored: string): Promise<
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 
+// Checked against when the login does not exist, so a wrong login takes as long as a wrong password
+// and response times do not reveal which logins exist.
+let dummyHash: Promise<string> | undefined;
+
 function toUser(row: Record<string, unknown>): User {
   return {
     id: row.id as number,
@@ -67,7 +71,13 @@ export async function login(
     [loginName.toLowerCase()],
   );
   const row = rows[0];
-  if (!row || !(await verifyPassword(password, row.password_hash))) return null;
+  if (!row) {
+    dummyHash ??= hashPassword(randomBytes(16).toString("hex"));
+    await verifyPassword(password, await dummyHash);
+    return null;
+  }
+  if (!(await verifyPassword(password, row.password_hash))) return null;
+  await db.query("DELETE FROM sessions WHERE expires_at < now()");
   const token = randomBytes(32).toString("base64url");
   await db.query(
     "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, now() + make_interval(hours => $3))",

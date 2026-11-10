@@ -147,6 +147,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
           staff={staff.filter((s) => s.active && s.sites.includes(site))}
           services={services}
           canEdit={user.role !== "doctor"}
+          canSeeHistory={user.role === "admin"}
         />
       )}
     </div>

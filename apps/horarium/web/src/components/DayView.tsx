@@ -26,11 +26,13 @@ interface Props {
   staff: Staff[];
   services: Service[];
   canEdit: boolean;
+  /** Admins see each patient's change log in the visit panel. */
+  canSeeHistory?: boolean;
 }
 
 type Booking = { staffId: number; startMin: number };
 
-export function DayView({ site, date, staff, services, canEdit }: Props) {
+export function DayView({ site, date, staff, services, canEdit, canSeeHistory = false }: Props) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [schedules, setSchedules] = useState<ScheduleBlock[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -236,6 +238,7 @@ export function DayView({ site, date, staff, services, canEdit }: Props) {
           appointment={selectedAppt}
           staff={staff}
           canEdit={canEdit}
+          canSeeHistory={canSeeHistory}
           onClose={() => setSelected(null)}
           onChanged={(message) => {
             setNotice(message);
