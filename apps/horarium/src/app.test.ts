@@ -134,6 +134,14 @@ describe("horarium API", { skip: TEST_DATABASE_URL ? false : "TEST_DATABASE_URL 
     const log = await db.query("SELECT changes FROM audit_log WHERE action = 'patient.update'");
     assert.deepEqual(log.rows[0].changes, { fields: ["notes"] });
 
+    const withBirthDate = await call("POST", "/api/patients", "recepcja.turek", {
+      firstName: "Ewa",
+      lastName: "Datowa",
+      birthDate: "1985-03-10",
+    });
+    const dated = await call("GET", `/api/patients/${withBirthDate.body.id}`, "recepcja.turek");
+    assert.equal(dated.body.birthDate, "1985-03-10");
+
     const unknownOnly = await call("PATCH", `/api/patients/${created.body.id}`, "recepcja.turek", { shoeSize: 42 });
     assert.equal(unknownOnly.status, 400);
   });

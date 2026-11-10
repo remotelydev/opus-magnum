@@ -2,6 +2,7 @@ import { Button } from "@opus-magnum/dentaplus-ui/components/button";
 import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/20/solid";
 import { useEffect, useState } from "react";
 import { DayView } from "./components/DayView.tsx";
+import { PatientsPage } from "./components/PatientsPage.tsx";
 import { ServicesPage } from "./components/ServicesPage.tsx";
 import { Login } from "./components/Login.tsx";
 import { api, ApiError, type Service, type Site, type Staff, type User } from "./lib/api.ts";
@@ -39,10 +40,10 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [site, setSite] = useState<string>(readSite() ?? "turek");
   const [date, setDate] = useState(todayInClinic());
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"calendar" | "services">("calendar");
+  const [view, setView] = useState<"calendar" | "patients" | "services">("calendar");
 
   useEffect(() => {
-    if (view !== "calendar") return;
+    if (view === "services") return;
     Promise.all([api.sites(), api.staff(), api.services()])
       .then(([si, st, se]) => {
         setSites(si);
@@ -74,6 +75,9 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
         <nav className="mr-2 flex gap-1" aria-label="Sekcje">
           <Button variant={view === "calendar" ? "primary" : "ghost"} size="sm" onClick={() => setView("calendar")}>
             Terminarz
+          </Button>
+          <Button variant={view === "patients" ? "primary" : "ghost"} size="sm" onClick={() => setView("patients")}>
+            Pacjenci
           </Button>
           {user.role === "admin" && (
             <Button variant={view === "services" ? "primary" : "ghost"} size="sm" onClick={() => setView("services")}>
@@ -139,6 +143,18 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
       {error && <p className="px-4 py-2 text-sm text-destructive">{error}</p>}
       {view === "services" ? (
         <ServicesPage />
+      ) : view === "patients" ? (
+        <PatientsPage
+          sites={sites}
+          staff={staff}
+          canEdit={user.role !== "doctor"}
+          canSeeHistory={user.role === "admin"}
+          onOpenDay={(siteId, day) => {
+            chooseSite(siteId);
+            setDate(day);
+            setView("calendar");
+          }}
+        />
       ) : (
         <DayView
           key={`${site}-${date}`}

@@ -2,7 +2,7 @@
 
 *Horarium*: the medieval monastic timetable of the hours of the day.
 
-Practice management for the DentaPlus+ clinic (Turek and Poddębice): logins and roles, staff and sites, services, patients, working hours and appointments, with a change log, plus the reception UI (day view per site, booking, drag to move, visit details). Data import and SMS reminders follow.
+Practice management for the DentaPlus+ clinic (Turek and Poddębice): logins and roles, staff and sites, services, patients, working hours and appointments, with a change log, plus the reception UI (day view per site, booking, drag to move, visit details, patient search with the full card and editing). Data import and SMS reminders follow.
 
 - `src/`: API (Fastify + PostgreSQL).
 - `web/`: reception UI (React + Vite). Built to `web/dist` and served by the same process, so the clinic runs one service.

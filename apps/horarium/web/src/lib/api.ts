@@ -119,6 +119,8 @@ export const api = {
   patient: (id: number) => request<Patient & { appointments: Appointment[] }>("GET", `/api/patients/${id}`),
   patientHistory: (id: number) => request<HistoryEntry[]>("GET", `/api/patients/${id}/history`),
   createPatient: (body: Partial<Patient>) => request<{ id: number }>("POST", "/api/patients", body),
+  updatePatient: (id: number, body: Partial<Omit<Patient, "id">>) =>
+    request<{ ok: true }>("PATCH", `/api/patients/${id}`, body),
   appointments: (site: string, from: string, to: string) =>
     request<Appointment[]>("GET", `/api/appointments?${qs({ site, from, to })}`),
   schedules: (site: string, from: string, to: string) =>

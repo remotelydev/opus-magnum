@@ -6,6 +6,10 @@ import pg from "pg";
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");
 const MIGRATION_LOCK = 727001;
 
+// DATE columns (birth_date) come back as "YYYY-MM-DD" strings. The default turns them into a Date at
+// local midnight, which serialises as the previous day in UTC on a machine set to Polish time.
+pg.types.setTypeParser(pg.types.builtins.DATE, (value) => value);
+
 export type Db = pg.Pool;
 export type Queryable = Pick<pg.Pool, "query">;
 
