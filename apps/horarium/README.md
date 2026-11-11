@@ -46,7 +46,7 @@ pnpm --filter horarium dev
 
 Open http://127.0.0.1:8790. For UI work with hot reload, run `dev` and `dev:web` side by side and open http://127.0.0.1:5174 (it proxies `/api`).
 
-Demo data (made-up patients, only on an empty database; logins `recepcja` and `admin`, password `demo-demo-demo` unless `CLINIC_PASSWORD` is set):
+Demo data at the clinic's real scale (made-up: 26 935 patients, 24 staff, 35 services, about 45 visits a day; only on an empty database or one the seed filled earlier with a smaller set; logins `recepcja` and `admin`, password `demo-demo-demo` unless `CLINIC_PASSWORD` is set):
 
 ```bash
 pnpm --filter horarium seed:demo
