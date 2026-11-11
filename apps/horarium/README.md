@@ -2,7 +2,7 @@
 
 *Horarium*: the medieval monastic timetable of the hours of the day.
 
-Practice management for the DentaPlus+ clinic (Turek and Poddębice): logins and roles, staff and sites, services, patients, working hours and appointments, with a change log, plus the reception UI (day view per site, booking, drag to move, visit details, patient search with the full card and editing). Data import and SMS reminders follow.
+Practice management for the DentaPlus+ clinic (Turek and Poddębice): logins and roles, staff and sites, opening hours, work schedules, services, patients, working hours and appointments, with a change log, plus the reception UI (day view per site, booking, drag to move, visit details, patient search with the full card and editing). Data import and SMS reminders follow.
 
 - `src/`: API (Fastify + PostgreSQL).
 - `web/`: reception UI (React + Vite). Built to `web/dist` and served by the same process, so the clinic runs one service.
@@ -93,7 +93,14 @@ Without `TEST_DATABASE_URL` the API tests are skipped. CI runs them against a Po
 |---|---|---|
 | POST | `/api/auth/login`, `/api/auth/logout` | anyone |
 | GET | `/api/me`, `/api/sites`, `/api/staff`, `/api/services` | any login |
-| POST | `/api/staff`, `/api/services` | admin |
+| POST / PATCH | `/api/staff`, `/api/staff/:id` (name, title, phone, e-mail, sites, active, column order) | admin |
+| POST | `/api/services` | admin |
+| GET | `/api/opening-hours` (week and holidays of each site) | any login |
+| PUT | `/api/opening-hours/:site` (the week), PUT / DELETE `/api/opening-hours/:site/exceptions/:date` (holiday or changed day) | admin |
+| GET / PUT | `/api/staff/:id/pattern` (weekly work pattern) | read: any login, write: admin, reception |
+| POST | `/api/staff/:id/schedule/generate` `{from, to}` (lay the pattern over the dates) | admin, reception |
+| GET | `/api/staff/:id/schedules?from=&to=` (one person's working hours and absences) | any login |
+| GET | `/api/public/services`, `/api/public/opening-hours`, `/api/public/staff` (`?from=YYYY-MM-DD&days=N`, up to 62) | anyone, read-only |
 | GET | `/api/patients?q=` (name prefix or phone; no notes or medical flags), `/api/patients/:id` (full card with visits) | any login |
 | GET | `/api/patients/:id/history` (change log of the patient and their visits) | admin |
 | POST / PATCH | `/api/patients`, `/api/patients/:id` | admin, reception |
@@ -110,3 +117,5 @@ Rules built in:
 - Logins: after 5 failed attempts for one login from one address (or 20 from one address) within 15 minutes, further attempts get 429 until the window passes. Failed attempts are logged as `auth.failed`.
 - Request logs keep only the path, never the query string, so patient searches do not end up in log files.
 - Phone numbers are stored as E.164 (`+48…`), so the bot can match callers.
+- Working hours come from a weekly pattern per person ("Grafik pracy"). Laying it over a date range replaces the work blocks in that range, keeps absences and skips days the site is closed (holidays in "Godziny otwarcia").
+- For the reception bot: `/api/public/opening-hours` gives each site's regular week, whether it is open now, and the effective hours day by day with holidays applied; `/api/public/staff` gives active staff (name, title, sites, no contact data) with their working hours day by day, absence days left out. Publish only `/api/public/services` through a tunnel; the bot reads the other two inside the clinic network.

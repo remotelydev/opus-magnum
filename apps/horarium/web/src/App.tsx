@@ -3,7 +3,10 @@ import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/20/solid";
 import { useEffect, useState } from "react";
 import { DayView } from "./components/DayView.tsx";
 import { PatientsPage } from "./components/PatientsPage.tsx";
+import { OpeningHoursPage } from "./components/OpeningHoursPage.tsx";
+import { SchedulePage } from "./components/SchedulePage.tsx";
 import { ServicesPage } from "./components/ServicesPage.tsx";
+import { StaffPage } from "./components/StaffPage.tsx";
 import { Login } from "./components/Login.tsx";
 import { Sidebar, type View } from "./components/Sidebar.tsx";
 import { api, ApiError, type Service, type Site, type Staff, type User } from "./lib/api.ts";
@@ -44,6 +47,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("calendar");
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [scheduleStaff, setScheduleStaff] = useState<number | null>(null);
 
   const toggleCollapsed = () => {
     setCollapsed((was) => {
@@ -53,7 +57,8 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   };
 
   useEffect(() => {
-    if (view === "services") return;
+    // Reference data for the calendar and patients; reloaded on return so settings changes show up.
+    if (view !== "calendar" && view !== "patients") return;
     Promise.all([api.sites(), api.staff(), api.services()])
       .then(([si, st, se]) => {
         setSites(si);
@@ -82,7 +87,10 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
       <Sidebar
         user={user}
         view={view}
-        onView={setView}
+        onView={(next) => {
+          if (next === "schedule") setScheduleStaff(null);
+          setView(next);
+        }}
         collapsed={collapsed}
         onToggleCollapsed={toggleCollapsed}
         onLogout={logout}
@@ -141,6 +149,17 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
         {error && <p className="px-4 py-2 text-sm text-destructive">{error}</p>}
         {view === "services" ? (
           <ServicesPage />
+        ) : view === "staff" ? (
+          <StaffPage
+            onOpenSchedule={(id) => {
+              setScheduleStaff(id);
+              setView("schedule");
+            }}
+          />
+        ) : view === "schedule" ? (
+          <SchedulePage initialStaffId={scheduleStaff} />
+        ) : view === "opening" ? (
+          <OpeningHoursPage />
         ) : view === "patients" ? (
           <PatientsPage
             sites={sites}

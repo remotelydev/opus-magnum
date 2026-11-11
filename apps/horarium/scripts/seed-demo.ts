@@ -4,12 +4,76 @@ import { createUser } from "../src/auth.js";
 import { createPool, migrate } from "../src/db.js";
 
 const DEMO_PASSWORD = process.env.CLINIC_PASSWORD ?? "demo-demo-demo";
+const DEMO_ADMIN_NAME = "Administrator (demo)";
+
+const TITLES: Record<string, string> = {
+  "lek. dent. Anna Demo": "lekarz dentysta",
+  "lek. dent. Piotr Przykład": "lekarz dentysta, endodonta",
+  "lek. dent. Ewa Testowa": "lekarz dentysta, ortodonta",
+  "lek. dent. Marek Próbny": "lekarz dentysta, chirurg",
+};
+
+/** Made-up opening hours, holidays, staff titles and weekly patterns (the demo staff work Mon-Fri 8-16). */
+async function seedSettings(db: ReturnType<typeof createPool>) {
+  const week: Array<[string, number, string, string]> = [
+    ...[1, 2, 3, 4, 5].map((d) => ["turek", d, "08:00", "20:00"] as [string, number, string, string]),
+    ["turek", 6, "09:00", "13:00"],
+    ...[1, 2, 3, 4, 5].map((d) => ["poddebice", d, "09:00", "18:00"] as [string, number, string, string]),
+  ];
+  for (const [site, weekday, opens, closes] of week) {
+    await db.query("INSERT INTO opening_hours VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING", [site, weekday, opens, closes]);
+  }
+  const now = new Date();
+  const year = now.getUTCMonth() === 11 && now.getUTCDate() > 26 ? now.getUTCFullYear() + 1 : now.getUTCFullYear();
+  const holidays: Array<[string, string | null, string | null, string]> = [
+    [`${year}-12-24`, null, null, "Wigilia"],
+    [`${year}-12-25`, null, null, "Boże Narodzenie"],
+    [`${year}-12-26`, null, null, "Drugi dzień świąt"],
+    [`${year}-12-31`, "08:00", "13:00", "Sylwester, krócej"],
+  ];
+  for (const site of ["turek", "poddebice"]) {
+    for (const [day, opens, closes, note] of holidays) {
+      await db.query("INSERT INTO opening_exceptions VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING", [site, day, opens, closes, note]);
+    }
+  }
+  const { rows } = await db.query<{ id: number; name: string; site: string }>(
+    `SELECT st.id, st.name, min(ss.site_id) AS site FROM staff st JOIN staff_sites ss ON ss.staff_id = st.id
+      GROUP BY st.id ORDER BY st.id`,
+  );
+  for (const [i, s] of rows.entries()) {
+    await db.query("UPDATE staff SET title = COALESCE(title, $2), sort_order = $3 WHERE id = $1", [
+      s.id,
+      TITLES[s.name] ?? (s.name === "Higienizacja" ? null : "lekarz dentysta"),
+      i + 1,
+    ]);
+    const has = await db.query("SELECT 1 FROM work_patterns WHERE staff_id = $1", [s.id]);
+    if (has.rowCount) continue;
+    // Same site as the working hours the seed writes (Piotr, at both sites, works in Turek).
+    const site = s.name === "lek. dent. Piotr Przykład" ? "turek" : s.site;
+    for (const weekday of [1, 2, 3, 4, 5]) {
+      await db.query("INSERT INTO work_patterns (staff_id, weekday, site_id, starts, ends) VALUES ($1, $2, $3, '08:00', '16:00')", [
+        s.id,
+        weekday,
+        site,
+      ]);
+    }
+  }
+}
 
 const db = createPool();
 try {
   await migrate(db);
   const { rows } = await db.query<{ n: number }>("SELECT count(*)::int AS n FROM patients");
   if (rows[0].n > 0) {
+    // A demo database made before the settings existed gets them topped up. Only a database this script
+    // created (it has the demo admin) and only while the settings are still empty: never real clinic data.
+    const demo = await db.query("SELECT 1 FROM users WHERE login = 'admin' AND name = $1", [DEMO_ADMIN_NAME]);
+    const empty = await db.query("SELECT 1 FROM opening_hours LIMIT 1");
+    if (demo.rowCount && !empty.rowCount) {
+      await seedSettings(db);
+      console.log("demo data: added opening hours, holidays, staff titles and work patterns");
+      process.exit(0);
+    }
     console.error("database already has patients: demo seed only runs on an empty database");
     process.exit(1);
   }
@@ -102,7 +166,8 @@ try {
   }
 
   await createUser(db, { login: "recepcja", name: "Recepcja (demo)", role: "reception", password: DEMO_PASSWORD });
-  await createUser(db, { login: "admin", name: "Administrator (demo)", role: "admin", password: DEMO_PASSWORD });
+  await createUser(db, { login: "admin", name: DEMO_ADMIN_NAME, role: "admin", password: DEMO_PASSWORD });
+  await seedSettings(db);
   console.log(`demo data: ${staff.length} staff, ${services.length} services, ${patientIds.length} patients, logins recepcja/admin`);
 } finally {
   await db.end();

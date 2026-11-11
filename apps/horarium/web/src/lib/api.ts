@@ -13,8 +13,39 @@ export interface Staff {
   id: number;
   name: string;
   kind: "person" | "calendar";
+  title: string | null;
+  phone: string | null;
+  email: string | null;
   active: boolean;
+  sortOrder: number;
   sites: string[];
+}
+export type StaffInput = Omit<Staff, "id">;
+/** One opening range of a site on a weekday (1 = Monday ... 7 = Sunday), clinic time "HH:MM". */
+export interface OpeningDay {
+  weekday: number;
+  opens: string;
+  closes: string;
+}
+export interface OpeningException {
+  date: string;
+  opens: string | null;
+  closes: string | null;
+  closed: boolean;
+  note: string | null;
+}
+export interface SiteOpening {
+  id: string;
+  name: string;
+  week: OpeningDay[];
+  exceptions: OpeningException[];
+}
+/** One range of a person's weekly work pattern. */
+export interface PatternDay {
+  weekday: number;
+  siteId: string;
+  starts: string;
+  ends: string;
 }
 export interface Service {
   id: number;
@@ -121,6 +152,23 @@ export const api = {
   allServices: () => request<Service[]>("GET", "/api/services?all=true"),
   createService: (body: Partial<ServiceInput>) => request<{ id: number }>("POST", "/api/services", body),
   updateService: (id: number, body: Partial<ServiceInput>) => request<{ ok: true }>("PATCH", `/api/services/${id}`, body),
+  createStaff: (body: Partial<StaffInput>) => request<{ id: number }>("POST", "/api/staff", body),
+  updateStaff: (id: number, body: Partial<StaffInput>) => request<{ ok: true }>("PATCH", `/api/staff/${id}`, body),
+  openingHours: () => request<{ timezone: string; sites: SiteOpening[] }>("GET", "/api/opening-hours"),
+  saveOpeningWeek: (site: string, week: OpeningDay[]) => request<{ ok: true }>("PUT", `/api/opening-hours/${site}`, { week }),
+  saveOpeningException: (site: string, date: string, body: { opens: string | null; closes: string | null; note: string | null }) =>
+    request<{ ok: true }>("PUT", `/api/opening-hours/${site}/exceptions/${date}`, body),
+  deleteOpeningException: (site: string, date: string) =>
+    request<{ ok: true }>("DELETE", `/api/opening-hours/${site}/exceptions/${date}`),
+  workPattern: (staffId: number) => request<PatternDay[]>("GET", `/api/staff/${staffId}/pattern`),
+  saveWorkPattern: (staffId: number, days: PatternDay[]) => request<{ ok: true }>("PUT", `/api/staff/${staffId}/pattern`, { days }),
+  generateSchedule: (staffId: number, from: string, to: string) =>
+    request<{ created: number; removed: number; skippedClosed: number }>("POST", `/api/staff/${staffId}/schedule/generate`, { from, to }),
+  staffSchedules: (staffId: number, from: string, to: string) =>
+    request<ScheduleBlock[]>("GET", `/api/staff/${staffId}/schedules?${qs({ from, to })}`),
+  createSchedule: (body: { staffId: number; siteId: string; startsAt: string; endsAt: string; kind: "work" | "absence" }) =>
+    request<{ id: number }>("POST", "/api/schedules", body),
+  deleteSchedule: (id: number) => request<{ ok: true }>("DELETE", `/api/schedules/${id}`),
   searchPatients: (q: string) => request<PatientSummary[]>("GET", `/api/patients?${qs({ q, limit: 15 })}`),
   listPatients: (q: string, page: number, pageSize: number) =>
     request<PatientPage>("GET", `/api/patients/list?${qs({ q, page, pageSize })}`),
