@@ -57,17 +57,19 @@ pnpm --filter horarium seed:demo
 
 ## Preview (demo data only)
 
-`Dockerfile` builds the API and the UI into one image. `preview/start.sh` migrates, fills an empty database with made-up demo data and starts the server. A preview always gets its own database and never touches the clinic's: real patient data stays on the clinic server.
+To show the app to others, the Mac runs a preview in Docker: Horarium built from the current checkout, its own database with made-up demo data (`preview/start.sh` seeds it on first start) and a Cloudflare quick tunnel that gives it a public `https://….trycloudflare.com` address. It never touches the clinic database: real patient data stays on the clinic server. All three containers restart with Docker, so the preview survives a reboot.
 
-Always set `CLINIC_PASSWORD`, so the demo logins `recepcja` and `admin` do not use the public default password.
-
-- **Render (free)**: `render.yaml` at the repo root deploys the `preview` branch on every push. The database is a free Neon Postgres (its connection string goes into `DATABASE_URL`). The free plan sleeps after 15 minutes idle, so the first visit takes about a minute.
-- **Tunnel from a laptop (free)**: `preview/tunnel.sh` runs the current checkout with its own throwaway database in Docker and shares it at a `…trycloudflare.com` address while the script runs.
-- **Railway (paid)**: `railway.json`, with a separate preview for every pull request.
+Put the password for the demo logins `recepcja` and `admin` into `apps/horarium/preview/.env` (not committed), then start or update:
 
 ```bash
-CLINIC_PASSWORD='your-own-password' apps/horarium/preview/tunnel.sh
+echo "CLINIC_PASSWORD=your-own-password" > apps/horarium/preview/.env
 ```
+
+```bash
+apps/horarium/preview/up.sh
+```
+
+Running it again after `git pull` rebuilds the app and keeps the address and the data. `--new-url` restarts the tunnel and gives a new address. The address also changes when Docker restarts.
 
 ## Tests
 

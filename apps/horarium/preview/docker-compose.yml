@@ -1,12 +1,15 @@
-# Local preview with demo data, for sharing through a tunnel (see preview/tunnel.sh).
-# Its own throwaway database: never point this at the clinic database.
+# Horarium preview with made-up demo data, shared through a Cloudflare quick tunnel.
+# Start or update with preview/up.sh. Its own database: never point this at the clinic database.
 services:
   db:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_USER: horarium
       POSTGRES_PASSWORD: horarium
       POSTGRES_DB: horarium_preview
+    volumes:
+      - preview-db:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "horarium"]
       interval: 2s
@@ -15,11 +18,20 @@ services:
     build:
       context: ../../..
       dockerfile: apps/horarium/Dockerfile
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgres://horarium:horarium@db:5432/horarium_preview
-      CLINIC_PASSWORD: ${CLINIC_PASSWORD:?set CLINIC_PASSWORD before starting the preview}
+      CLINIC_PASSWORD: ${CLINIC_PASSWORD:?set CLINIC_PASSWORD in apps/horarium/preview/.env}
     ports:
       - "127.0.0.1:8791:8790"
     depends_on:
       db:
         condition: service_healthy
+  tunnel:
+    image: cloudflare/cloudflared:2025.10.0
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://app:8790
+    depends_on:
+      - app
+volumes:
+  preview-db:
