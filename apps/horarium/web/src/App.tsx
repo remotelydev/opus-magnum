@@ -5,6 +5,7 @@ import { DayView } from "./components/DayView.tsx";
 import { PatientsPage } from "./components/PatientsPage.tsx";
 import { ServicesPage } from "./components/ServicesPage.tsx";
 import { Login } from "./components/Login.tsx";
+import { ThemeToggle } from "./components/ThemeToggle.tsx";
 import { api, ApiError, type Service, type Site, type Staff, type User } from "./lib/api.ts";
 import { addDays, formatDay, todayInClinic } from "./lib/time.ts";
 
@@ -135,6 +136,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
           <span>
             {user.name} ({user.role === "admin" ? "administrator" : user.role === "reception" ? "recepcja" : "lekarz"})
           </span>
+          <ThemeToggle />
           <Button variant="ghost" size="sm" onClick={logout}>
             Wyloguj
           </Button>

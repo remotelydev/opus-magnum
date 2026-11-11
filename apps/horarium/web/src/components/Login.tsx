@@ -2,6 +2,7 @@ import { Button } from "@opus-magnum/dentaplus-ui/components/button";
 import { Input, Label } from "@opus-magnum/dentaplus-ui/components/field";
 import { useState, type FormEvent } from "react";
 import { api, type User } from "../lib/api.ts";
+import { ThemeToggle } from "./ThemeToggle.tsx";
 
 export function Login({ onLogin }: { onLogin: (user: User) => void }) {
   const [login, setLogin] = useState("");
@@ -24,7 +25,8 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
   };
 
   return (
-    <main className="flex h-full items-center justify-center bg-background p-4">
+    <main className="relative flex h-full items-center justify-center bg-background p-4">
+      <ThemeToggle className="absolute top-3 right-3 text-muted-foreground" />
       <form onSubmit={submit} className="w-full max-w-xs space-y-4 rounded-lg border border-border bg-surface p-6 shadow-sm">
         <h1 className="text-lg font-semibold text-primary">Horarium · DentaPlus+</h1>
         <div className="space-y-1">
