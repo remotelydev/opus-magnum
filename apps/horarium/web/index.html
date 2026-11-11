@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Horarium · DentaPlus+</title>
+    <script>
+      // Apply the saved theme before first paint so a forced theme does not flash (see src/lib/theme.ts).
+      try {
+        var t = localStorage.getItem("horarium.theme");
+        if (t === "light" || t === "dark") document.documentElement.classList.add(t);
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
