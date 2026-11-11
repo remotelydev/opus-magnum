@@ -1,6 +1,8 @@
 import { Button } from "@opus-magnum/dentaplus-ui/components/button";
 import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/20/solid";
-import { useEffect, useState } from "react";
+import { UserGroupIcon } from "@heroicons/react/24/outline";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { DayStaffPanel } from "./components/DayStaffPanel.tsx";
 import { DayView } from "./components/DayView.tsx";
 import { PatientsPage } from "./components/PatientsPage.tsx";
 import { OpeningHoursPage } from "./components/OpeningHoursPage.tsx";
@@ -10,10 +12,23 @@ import { StaffPage } from "./components/StaffPage.tsx";
 import { Login } from "./components/Login.tsx";
 import { BottomNav, Sidebar, type View } from "./components/Sidebar.tsx";
 import { api, ApiError, type Service, type Site, type Staff, type User } from "./lib/api.ts";
+import { readChoice, saveChoice, selectedIds, workHours, workingIds, type ColumnChoice } from "./lib/columns.ts";
 import { readCollapsed, saveCollapsed } from "./lib/sidebar.ts";
 import { addDays, formatDay, todayInClinic } from "./lib/time.ts";
+import { useDayData } from "./lib/useDayData.ts";
+import { useMediaQuery } from "./lib/useMediaQuery.ts";
 
 const SITE_KEY = "horarium.site";
+/** Whether the day-and-staff panel is shown beside the calendar on wide screens. */
+const DAY_PANEL_KEY = "horarium.dayPanel";
+
+function readPanelPinned(): boolean {
+  try {
+    return localStorage.getItem(DAY_PANEL_KEY) !== "hidden";
+  } catch {
+    return true;
+  }
+}
 
 function readSite(): string | null {
   try {
@@ -49,15 +64,29 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [scheduleStaff, setScheduleStaff] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  // One person's column only (handy on a phone), or null for everyone at the site.
-  const [focusStaff, setFocusStaff] = useState<number | null>(null);
+  // Which people get a column: whoever works that day, or the user's own ticks (remembered per site).
+  const [choice, setChoice] = useState<ColumnChoice>(() => readChoice(readSite() ?? "turek"));
+  // Wide screens (1024 px and up) dock the day-and-staff panel beside the calendar; narrower ones
+  // open it over the calendar from the button in the bar.
+  const wide = useMediaQuery("(min-width: 64rem)");
+  const [panelPinned, setPanelPinned] = useState(readPanelPinned);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const day = useDayData(site, date, view === "calendar");
 
   useEffect(() => {
-    if (!menuOpen) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
+    if (!menuOpen && !panelOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setMenuOpen(false);
+      setPanelOpen(false);
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [menuOpen]);
+  }, [menuOpen, panelOpen]);
+
+  useEffect(() => {
+    if (wide) setPanelOpen(false);
+  }, [wide]);
 
   const toggleCollapsed = () => {
     setCollapsed((was) => {
@@ -80,7 +109,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   const chooseSite = (id: string) => {
     setSite(id);
-    setFocusStaff(null);
+    setChoice(readChoice(id));
     try {
       localStorage.setItem(SITE_KEY, id);
     } catch {
@@ -98,7 +127,50 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
     setView(next);
     setMenuOpen(false);
   };
-  const siteStaff = staff.filter((s) => s.active && s.sites.includes(site));
+  const siteStaff = useMemo(() => staff.filter((s) => s.active && s.sites.includes(site)), [staff, site]);
+
+  // Until the new day's schedule arrives, keep the previous day's set so the columns do not jump.
+  const lastWorking = useRef<Set<number>>(new Set());
+  const working = useMemo(() => {
+    if (!day.loaded) return lastWorking.current;
+    return (lastWorking.current = workingIds(date, day.schedules, day.appointments));
+  }, [day.loaded, day.schedules, day.appointments, date]);
+  const hours = useMemo(() => workHours(date, day.schedules), [date, day.schedules]);
+  const selected = useMemo(() => selectedIds(siteStaff, choice, working), [siteStaff, choice, working]);
+  const columns = siteStaff.filter((s) => selected.has(s.id));
+
+  const changeChoice = (next: ColumnChoice) => {
+    setChoice(next);
+    saveChoice(site, next);
+  };
+  const togglePanel = () => {
+    if (!wide) return setPanelOpen((open) => !open);
+    setPanelPinned((was) => {
+      try {
+        localStorage.setItem(DAY_PANEL_KEY, was ? "hidden" : "shown");
+      } catch {
+        /* private mode */
+      }
+      return !was;
+    });
+  };
+  const panelShown = wide ? panelPinned : panelOpen;
+  const panel = (drawer: boolean) => (
+    <DayStaffPanel
+      date={date}
+      onDate={(d) => {
+        setDate(d);
+        if (drawer) setPanelOpen(false);
+      }}
+      staff={siteStaff}
+      selected={selected}
+      working={working}
+      hours={hours}
+      auto={choice.mode === "auto"}
+      onChoice={changeChoice}
+      onClose={drawer ? () => setPanelOpen(false) : undefined}
+    />
+  );
 
   return (
     <div className="flex h-full bg-background text-foreground">
@@ -127,6 +199,12 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
           />
         </div>
       )}
+      {panelOpen && view === "calendar" && (
+        <div className="fixed inset-0 z-40 flex lg:hidden" role="dialog" aria-modal="true" aria-label="Dzień i pracownicy">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setPanelOpen(false)} />
+          <div className="relative h-full w-80 max-w-full shadow-xl max-sm:w-full">{panel(true)}</div>
+        </div>
+      )}
       <main className="flex min-w-0 flex-1 flex-col">
         {view === "calendar" && (
           <header className="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-surface px-3 py-2 sm:px-4">
@@ -151,13 +229,17 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               >
                 <ChevronRightIcon />
               </Button>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => e.target.value && setDate(e.target.value)}
-                className="ml-1 h-7 min-w-0 rounded-md border border-input bg-surface px-2 text-xs max-sm:flex-1 pointer-coarse:h-9"
-                aria-label="Wybierz dzień"
-              />
+              <Button
+                variant={panelShown ? "primary" : "outline"}
+                size="sm"
+                className="ml-1 max-sm:ml-auto"
+                onClick={togglePanel}
+                aria-expanded={panelShown}
+                title={panelShown ? "Ukryj panel dnia i pracowników" : "Wybierz dzień i pracowników"}
+              >
+                <UserGroupIcon className="size-4" aria-hidden="true" />
+                Pracownicy {selected.size}/{siteStaff.length}
+              </Button>
             </div>
             <div
               className="ml-auto flex overflow-hidden rounded-md border border-input"
@@ -205,17 +287,27 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
             }}
           />
         ) : (
-          <DayView
-            key={`${site}-${date}`}
-            site={site}
-            date={date}
-            staff={siteStaff}
-            focusStaff={focusStaff}
-            onFocusStaff={setFocusStaff}
-            services={services}
-            canEdit={user.role !== "doctor"}
-            canSeeHistory={user.role === "admin"}
-          />
+          <div className="flex min-h-0 min-w-0 flex-1">
+            {wide && panelPinned && (
+              <aside className="w-64 shrink-0 border-r border-border" aria-label="Dzień i pracownicy">
+                {panel(false)}
+              </aside>
+            )}
+            <DayView
+              key={`${site}-${date}`}
+              site={site}
+              date={date}
+              staff={siteStaff}
+              columns={columns}
+              appointments={day.appointments}
+              schedules={day.schedules}
+              error={day.error}
+              reload={day.reload}
+              services={services}
+              canEdit={user.role !== "doctor"}
+              canSeeHistory={user.role === "admin"}
+            />
+          </div>
         )}
         <BottomNav view={view} onView={openView} onMenu={() => setMenuOpen((o) => !o)} menuOpen={menuOpen} />
       </main>

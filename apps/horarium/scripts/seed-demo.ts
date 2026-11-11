@@ -10,6 +10,7 @@
 // smaller than this scale is emptied and filled again. Any other database with patients is left alone.
 import { createUser } from "../src/auth.js";
 import { createPool, migrate, type Db } from "../src/db.js";
+import { STAFF_PALETTE } from "../src/settings.js";
 
 const DEMO_PASSWORD = process.env.CLINIC_PASSWORD ?? "demo-demo-demo";
 const DEMO_ADMIN_NAME = "Administrator (demo)";
@@ -329,8 +330,8 @@ async function seedAll(client: Queryable) {
   for (const [i, s] of STAFF.entries()) {
     const id = (
       await client.query<{ id: number }>(
-        "INSERT INTO staff (name, kind, title, sort_order) VALUES ($1, $2, $3, $4) RETURNING id",
-        [s.name, s.kind ?? "person", s.title || null, i + 1],
+        "INSERT INTO staff (name, kind, title, sort_order, color) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+        [s.name, s.kind ?? "person", s.title || null, i + 1, STAFF_PALETTE[i % STAFF_PALETTE.length]],
       )
     ).rows[0].id;
     for (const site of s.sites) await client.query("INSERT INTO staff_sites VALUES ($1, $2)", [id, site]);

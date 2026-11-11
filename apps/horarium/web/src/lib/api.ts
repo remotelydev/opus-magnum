@@ -18,6 +18,8 @@ export interface Staff {
   email: string | null;
   active: boolean;
   sortOrder: number;
+  /** Column colour, "#rrggbb"; null only for rows saved before colours existed. */
+  color: string | null;
   sites: string[];
 }
 export type StaffInput = Omit<Staff, "id">;
