@@ -72,6 +72,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [panelPinned, setPanelPinned] = useState(readPanelPinned);
   const [panelOpen, setPanelOpen] = useState(false);
   const day = useDayData(site, date, view === "calendar");
+  const [showCancelled, setShowCancelled] = useState(true);
 
   useEffect(() => {
     if (!menuOpen && !panelOpen) return;
@@ -138,6 +139,9 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const hours = useMemo(() => workHours(date, day.schedules), [date, day.schedules]);
   const selected = useMemo(() => selectedIds(siteStaff, choice, working), [siteStaff, choice, working]);
   const columns = siteStaff.filter((s) => selected.has(s.id));
+  const liveVisits = day.appointments.filter((a) => a.status !== "cancelled");
+  const visitCount = liveVisits.filter((a) => selected.has(a.staffId)).length;
+  const hiddenVisits = liveVisits.length - visitCount;
 
   const changeChoice = (next: ColumnChoice) => {
     setChoice(next);
@@ -241,6 +245,21 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
                 Pracownicy {selected.size}/{siteStaff.length}
               </Button>
             </div>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span>
+                {visitCount} wizyt
+                {hiddenVisits > 0 && (
+                  <span className="text-foreground" title="Wizyty osób, które nie są zaznaczone w panelu Pracownicy">
+                    {" "}
+                    (+{hiddenVisits} u niezaznaczonych)
+                  </span>
+                )}
+              </span>
+              <label className="flex items-center gap-1 pointer-coarse:py-1">
+                <input type="checkbox" checked={showCancelled} onChange={(e) => setShowCancelled(e.target.checked)} />
+                Pokaż odwołane
+              </label>
+            </div>
             <div
               className="ml-auto flex overflow-hidden rounded-md border border-input"
               role="tablist"
@@ -306,6 +325,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               services={services}
               canEdit={user.role !== "doctor"}
               canSeeHistory={user.role === "admin"}
+              showCancelled={showCancelled}
             />
           </div>
         )}

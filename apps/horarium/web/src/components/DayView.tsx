@@ -41,6 +41,8 @@ interface Props {
   canEdit: boolean;
   /** Admins see each patient's change log in the visit panel. */
   canSeeHistory?: boolean;
+  /** "Pokaż odwołane" in the header: cancelled and no-show visits stay on the calendar. */
+  showCancelled?: boolean;
 }
 
 type Booking = { staffId: number; startMin: number };
@@ -57,11 +59,11 @@ export function DayView({
   services,
   canEdit,
   canSeeHistory = false,
+  showCancelled = true,
 }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [booking, setBooking] = useState<Booking | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
-  const [showCancelled, setShowCancelled] = useState(true);
   /** The free slot under the mouse, as in Versum: its start time shows in the slot's top-left corner.
    *  Mouse only: touch screens have no hover and keep the plain tap-to-book. */
   const [hover, setHover] = useState<Booking | null>(null);
@@ -105,46 +107,26 @@ export function DayView({
   };
 
   const selectedAppt = appointments.find((a) => a.id === selected) ?? null;
-  const visibleIds = new Set(columns.map((s) => s.id));
-  const visitCount = appointments.filter((a) => a.status !== "cancelled" && visibleIds.has(a.staffId)).length;
 
   if (!staff.length) {
     return <p className="p-6 text-sm text-muted-foreground">Brak lekarzy przypisanych do tej placówki.</p>;
   }
-  const hiddenVisits = appointments.filter((a) => a.status !== "cancelled" && !visibleIds.has(a.staffId)).length;
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border px-3 py-1 text-xs text-muted-foreground sm:px-4">
-          <span>{visitCount} wizyt</span>
-          <label className="flex items-center gap-1 pointer-coarse:py-1">
-            <input type="checkbox" checked={showCancelled} onChange={(e) => setShowCancelled(e.target.checked)} />
-            Pokaż odwołane
-          </label>
-          {canEdit && (
-            <>
-              <span className="hidden pointer-fine:lg:inline">
-                Kliknij wolne pole, żeby umówić. Przeciągnij wizytę, żeby ją przenieść.
-              </span>
-              <span className="hidden pointer-coarse:sm:inline">Dotknij wolnego pola, żeby umówić.</span>
-            </>
-          )}
-          <span>
-            {columns.length} z {staff.length} {staff.length === 1 ? "osoby" : "osób"}
-          </span>
-          {hiddenVisits > 0 && (
-            <span className="text-foreground" title="Wizyty osób, które nie są zaznaczone w panelu Pracownicy">
-              {hiddenVisits} wizyt u niezaznaczonych osób
-            </span>
-          )}
-          {error && <span className="text-destructive">Brak połączenia: {error}</span>}
-          {notice && (
-            <button className="ml-auto text-foreground underline-offset-2 hover:underline" onClick={() => setNotice(null)}>
-              {notice} ✕
-            </button>
-          )}
-        </div>
+        {/* The visit count and "Pokaż odwołane" live in the header; this bar only shows up for a
+            lost connection or the result of the last action. */}
+        {(error || notice) && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border px-3 py-1 text-xs text-muted-foreground sm:px-4">
+            {error && <span className="text-destructive">Brak połączenia: {error}</span>}
+            {notice && (
+              <button className="ml-auto text-foreground underline-offset-2 hover:underline" onClick={() => setNotice(null)}>
+                {notice} ✕
+              </button>
+            )}
+          </div>
+        )}
         {!columns.length && (
           <p className="p-6 text-sm text-muted-foreground">
             Nikt nie jest zaznaczony: tego dnia nikt nie ma grafiku albo odznaczono wszystkich. Zaznacz osoby
