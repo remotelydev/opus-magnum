@@ -5,8 +5,9 @@ import { DayView } from "./components/DayView.tsx";
 import { PatientsPage } from "./components/PatientsPage.tsx";
 import { ServicesPage } from "./components/ServicesPage.tsx";
 import { Login } from "./components/Login.tsx";
-import { ThemeToggle } from "./components/ThemeToggle.tsx";
+import { Sidebar, type View } from "./components/Sidebar.tsx";
 import { api, ApiError, type Service, type Site, type Staff, type User } from "./lib/api.ts";
+import { readCollapsed, saveCollapsed } from "./lib/sidebar.ts";
 import { addDays, formatDay, todayInClinic } from "./lib/time.ts";
 
 const SITE_KEY = "horarium.site";
@@ -41,7 +42,15 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [site, setSite] = useState<string>(readSite() ?? "turek");
   const [date, setDate] = useState(todayInClinic());
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"calendar" | "patients" | "services">("calendar");
+  const [view, setView] = useState<View>("calendar");
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+
+  const toggleCollapsed = () => {
+    setCollapsed((was) => {
+      saveCollapsed(!was);
+      return !was;
+    });
+  };
 
   useEffect(() => {
     if (view === "services") return;
@@ -69,38 +78,19 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   };
 
   return (
-    <div className="flex h-full flex-col bg-background text-foreground">
-      <header className="flex flex-wrap items-center gap-3 border-b border-border bg-surface px-4 py-2">
-        <strong className="text-sm text-primary">Horarium</strong>
-        <span className="-ml-2 text-xs text-muted-foreground">DentaPlus+</span>
-        <nav className="mr-2 flex gap-1" aria-label="Sekcje">
-          <Button variant={view === "calendar" ? "primary" : "ghost"} size="sm" onClick={() => setView("calendar")}>
-            Terminarz
-          </Button>
-          <Button variant={view === "patients" ? "primary" : "ghost"} size="sm" onClick={() => setView("patients")}>
-            Pacjenci
-          </Button>
-          {user.role === "admin" && (
-            <Button variant={view === "services" ? "primary" : "ghost"} size="sm" onClick={() => setView("services")}>
-              Usługi i cennik
-            </Button>
-          )}
-        </nav>
+    <div className="flex h-full bg-background text-foreground">
+      <Sidebar
+        user={user}
+        view={view}
+        onView={setView}
+        collapsed={collapsed}
+        onToggleCollapsed={toggleCollapsed}
+        onLogout={logout}
+      />
+      <main className="flex min-w-0 flex-1 flex-col">
         {view === "calendar" && (
-          <>
-            <div className="flex overflow-hidden rounded-md border border-input" role="tablist" aria-label="Placówka">
-              {sites.map((s) => (
-                <button
-                  key={s.id}
-                  role="tab"
-                  aria-selected={s.id === site}
-                  onClick={() => chooseSite(s.id)}
-                  className={`px-3 py-1 text-xs ${s.id === site ? "bg-primary text-primary-foreground" : "bg-surface hover:bg-muted"}`}
-                >
-                  {s.name}
-                </button>
-              ))}
-            </div>
+          <header className="flex min-h-14 flex-wrap items-center gap-3 border-b border-border bg-surface px-4 py-2">
+            <h1 className="mr-1 text-base font-semibold capitalize">{formatDay(date)}</h1>
             <div className="flex items-center gap-1">
               <Button
                 variant="outline"
@@ -129,45 +119,52 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
                 aria-label="Wybierz dzień"
               />
             </div>
-            <span className="text-sm capitalize">{formatDay(date)}</span>
-          </>
+            <div
+              className="ml-auto flex overflow-hidden rounded-md border border-input"
+              role="tablist"
+              aria-label="Placówka"
+            >
+              {sites.map((s) => (
+                <button
+                  key={s.id}
+                  role="tab"
+                  aria-selected={s.id === site}
+                  onClick={() => chooseSite(s.id)}
+                  className={`px-3 py-1 text-xs ${s.id === site ? "bg-primary text-primary-foreground" : "bg-surface hover:bg-muted"}`}
+                >
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          </header>
         )}
-        <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-          <span>
-            {user.name} ({user.role === "admin" ? "administrator" : user.role === "reception" ? "recepcja" : "lekarz"})
-          </span>
-          <ThemeToggle />
-          <Button variant="ghost" size="sm" onClick={logout}>
-            Wyloguj
-          </Button>
-        </div>
-      </header>
-      {error && <p className="px-4 py-2 text-sm text-destructive">{error}</p>}
-      {view === "services" ? (
-        <ServicesPage />
-      ) : view === "patients" ? (
-        <PatientsPage
-          sites={sites}
-          staff={staff}
-          canEdit={user.role !== "doctor"}
-          canSeeHistory={user.role === "admin"}
-          onOpenDay={(siteId, day) => {
-            chooseSite(siteId);
-            setDate(day);
-            setView("calendar");
-          }}
-        />
-      ) : (
-        <DayView
-          key={`${site}-${date}`}
-          site={site}
-          date={date}
-          staff={staff.filter((s) => s.active && s.sites.includes(site))}
-          services={services}
-          canEdit={user.role !== "doctor"}
-          canSeeHistory={user.role === "admin"}
-        />
-      )}
+        {error && <p className="px-4 py-2 text-sm text-destructive">{error}</p>}
+        {view === "services" ? (
+          <ServicesPage />
+        ) : view === "patients" ? (
+          <PatientsPage
+            sites={sites}
+            staff={staff}
+            canEdit={user.role !== "doctor"}
+            canSeeHistory={user.role === "admin"}
+            onOpenDay={(siteId, day) => {
+              chooseSite(siteId);
+              setDate(day);
+              setView("calendar");
+            }}
+          />
+        ) : (
+          <DayView
+            key={`${site}-${date}`}
+            site={site}
+            date={date}
+            staff={staff.filter((s) => s.active && s.sites.includes(site))}
+            services={services}
+            canEdit={user.role !== "doctor"}
+            canSeeHistory={user.role === "admin"}
+          />
+        )}
+      </main>
     </div>
   );
 }
