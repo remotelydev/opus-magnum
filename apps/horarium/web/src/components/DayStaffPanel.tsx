@@ -45,7 +45,6 @@ export function DayStaffPanel({
   const atWork = staff.filter((s) => working.has(s.id));
   const others = staff.filter((s) => !working.has(s.id));
   const all = () => onChoice({ mode: "manual", ids: staff.map((s) => s.id) });
-  const none = () => onChoice({ mode: "manual", ids: [] });
 
   const row = (s: Staff) => {
     const on = selected.has(s.id);
@@ -93,70 +92,69 @@ export function DayStaffPanel({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        {/* Month */}
-        <section className="border-b border-border p-3" aria-label="Wybór dnia">
-          <div className="mb-2 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => setMonth(addMonths(month, -1))}
-              aria-label="Poprzedni miesiąc"
-              className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground pointer-coarse:size-10"
-            >
-              <ChevronLeftIcon className="size-5" />
-            </button>
-            <span className="text-sm font-medium capitalize" aria-live="polite">
-              {formatMonth(month)}
-            </span>
-            <button
-              type="button"
-              onClick={() => setMonth(addMonths(month, 1))}
-              aria-label="Następny miesiąc"
-              className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground pointer-coarse:size-10"
-            >
-              <ChevronRightIcon className="size-5" />
-            </button>
-          </div>
-          <div className="grid grid-cols-7 text-center text-[11px] text-muted-foreground">
-            {WEEKDAYS.map((d) => (
-              <div key={d} className="py-1">
-                {d}
-              </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-7 gap-0.5 text-center text-xs">
-            {monthGrid(month).map((d) => {
-              const inMonth = monthOf(d) === month;
-              const isSelected = d === date;
-              const isToday = d === today;
-              return (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => onDate(d)}
-                  aria-pressed={isSelected}
-                  aria-current={isToday ? "date" : undefined}
-                  aria-label={new Date(`${d}T12:00:00Z`).toLocaleDateString("pl-PL", { timeZone: "UTC", day: "numeric", month: "long", year: "numeric" })}
-                  className={cx(
-                    "h-7 rounded-md tabular-nums transition-colors pointer-coarse:h-10",
-                    isSelected
-                      ? "bg-primary font-semibold text-primary-foreground"
-                      : isToday
-                        ? "font-semibold text-primary ring-1 ring-primary ring-inset hover:bg-primary-soft"
-                        : inMonth
-                          ? "text-foreground hover:bg-muted"
-                          : "text-muted-foreground/60 hover:bg-muted",
-                  )}
-                >
-                  {Number(d.slice(8))}
-                </button>
-              );
-            })}
-          </div>
-        </section>
+      {/* The month always stays in view; only the staff list below it scrolls. */}
+      <section className="shrink-0 border-b border-border p-3" aria-label="Wybór dnia">
+        <div className="mb-2 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setMonth(addMonths(month, -1))}
+            aria-label="Poprzedni miesiąc"
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground pointer-coarse:size-10"
+          >
+            <ChevronLeftIcon className="size-5" />
+          </button>
+          <span className="text-sm font-medium capitalize" aria-live="polite">
+            {formatMonth(month)}
+          </span>
+          <button
+            type="button"
+            onClick={() => setMonth(addMonths(month, 1))}
+            aria-label="Następny miesiąc"
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground pointer-coarse:size-10"
+          >
+            <ChevronRightIcon className="size-5" />
+          </button>
+        </div>
+        <div className="grid grid-cols-7 text-center text-[11px] text-muted-foreground">
+          {WEEKDAYS.map((d) => (
+            <div key={d} className="py-1">
+              {d}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-0.5 text-center text-xs">
+          {monthGrid(month).map((d) => {
+            const inMonth = monthOf(d) === month;
+            const isSelected = d === date;
+            const isToday = d === today;
+            return (
+              <button
+                key={d}
+                type="button"
+                onClick={() => onDate(d)}
+                aria-pressed={isSelected}
+                aria-current={isToday ? "date" : undefined}
+                aria-label={new Date(`${d}T12:00:00Z`).toLocaleDateString("pl-PL", { timeZone: "UTC", day: "numeric", month: "long", year: "numeric" })}
+                className={cx(
+                  "h-7 rounded-md tabular-nums transition-colors pointer-coarse:h-10",
+                  isSelected
+                    ? "bg-primary font-semibold text-primary-foreground"
+                    : isToday
+                      ? "font-semibold text-primary ring-1 ring-primary ring-inset hover:bg-primary-soft"
+                      : inMonth
+                        ? "text-foreground hover:bg-muted"
+                        : "text-muted-foreground/60 hover:bg-muted",
+                )}
+              >
+                {Number(d.slice(8))}
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
-        {/* Staff */}
-        <section className="p-2" aria-label="Pracownicy">
+      <section className="flex min-h-0 flex-1 flex-col" aria-label="Pracownicy">
+        <div className="shrink-0 px-2 pt-2">
           <div className="flex items-center gap-1 px-2 pt-1 pb-2">
             <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               Pracownicy <span className="font-normal normal-case tracking-normal">· {selected.size}/{staff.length}</span>
@@ -169,10 +167,9 @@ export function DayStaffPanel({
             <ChipButton active={!auto && selected.size === staff.length} onClick={all}>
               Wszyscy
             </ChipButton>
-            <ChipButton active={!auto && selected.size === 0} onClick={none}>
-              Nikt
-            </ChipButton>
           </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2">
           {atWork.length > 0 && (
             <>
               <div className="px-2 pt-1 text-[11px] text-muted-foreground">Pracują tego dnia ({atWork.length})</div>
@@ -187,8 +184,8 @@ export function DayStaffPanel({
               <ul>{others.map(row)}</ul>
             </>
           )}
-        </section>
-      </div>
+        </div>
+      </section>
 
       {onClose && (
         <div className="shrink-0 border-t border-border p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
