@@ -2,7 +2,7 @@ import { Button } from "@opus-magnum/dentaplus-ui/components/button";
 import { StatusBadge } from "@opus-magnum/dentaplus-ui/components/status";
 import { Input, Label } from "@opus-magnum/dentaplus-ui/components/field";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { api, type Appointment, type Patient, type PatientSummary, type Site, type Staff } from "../lib/api.ts";
+import { api, type Appointment, type Patient, type PatientPage, type Site, type Staff } from "../lib/api.ts";
 import { formatMinutes, toClinicTime } from "../lib/time.ts";
 import { PatientHistory } from "./PatientHistory.tsx";
 
@@ -20,87 +20,60 @@ interface Props {
 const dateFmt = new Intl.DateTimeFormat("pl-PL", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" });
 const formatDate = (iso: string) => dateFmt.format(new Date(`${iso.slice(0, 10)}T12:00:00Z`));
 
+const PAGE_SIZE = 25;
+
 export function PatientsPage({ sites, staff, canEdit, canSeeHistory, onOpenDay }: Props) {
   const [q, setQ] = useState("");
-  const [results, setResults] = useState<PatientSummary[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [result, setResult] = useState<PatientPage | null>(null);
+  const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<number | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
+  // Typing narrows the list after a short pause and starts again from page 1.
   useEffect(() => {
-    const text = q.trim();
-    if (text.length < 2) {
-      setResults(null);
-      return;
-    }
     const timer = setTimeout(() => {
-      api
-        .searchPatients(text)
-        .then((r) => {
-          setResults(r);
-          setError(null);
-        })
-        .catch((e: Error) => setError(e.message));
+      setQuery(q.trim());
+      setPage(1);
     }, 250);
     return () => clearTimeout(timer);
   }, [q]);
 
-  return (
-    <div className="flex min-h-0 flex-1">
-      <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-auto border-r border-border bg-surface p-4" aria-label="Wyszukiwarka pacjentów">
-        <div className="space-y-1">
-          <Label htmlFor="patient-search">Szukaj pacjenta</Label>
-          <Input
-            id="patient-search"
-            placeholder="Nazwisko, imię i nazwisko albo telefon"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            autoFocus
-            autoComplete="off"
-          />
-          <p className="text-xs text-muted-foreground">Początek nazwiska (np. „Kow”) albo pełny numer telefonu.</p>
-        </div>
-        {canEdit && (
-          <Button size="sm" variant="outline" onClick={() => setSelected("new")}>
-            + Nowy pacjent
-          </Button>
-        )}
-        {error && <p className="text-xs text-destructive">{error}</p>}
-        {results && results.length === 0 && <p className="text-sm text-muted-foreground">Nikogo nie znaleziono.</p>}
-        {results && results.length > 0 && (
-          <ul className="divide-y divide-border rounded-md border border-border text-sm">
-            {results.map((p) => (
-              <li key={p.id}>
-                <button
-                  className={`w-full px-3 py-2 text-left hover:bg-muted ${selected === p.id ? "bg-muted" : ""}`}
-                  onClick={() => setSelected(p.id)}
-                >
-                  <span className="font-medium">
-                    {p.lastName} {p.firstName}
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    {p.phone ?? "brak telefonu"}
-                    {p.birthDate ? ` · ur. ${formatDate(p.birthDate)}` : ""}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </aside>
+  useEffect(() => {
+    let current = true;
+    setLoading(true);
+    api
+      .listPatients(query, page, PAGE_SIZE)
+      .then((r) => {
+        if (!current) return;
+        setResult(r);
+        setError(null);
+      })
+      .catch((e: Error) => current && setError(e.message))
+      .finally(() => current && setLoading(false));
+    return () => {
+      current = false;
+    };
+  }, [query, page, reloadKey]);
+
+  const backToList = () => {
+    setSelected(null);
+    setReloadKey((k) => k + 1);
+  };
+
+  if (selected !== null) {
+    return (
       <main className="min-h-0 flex-1 overflow-auto p-4">
-        {selected === null && (
-          <p className="text-sm text-muted-foreground">Wyszukaj pacjenta po lewej, żeby zobaczyć jego kartę i wizyty.</p>
-        )}
-        {selected === "new" && (
-          <PatientForm
-            onCancel={() => setSelected(null)}
-            onSaved={(id, name) => {
-              setQ(name);
-              setSelected(id);
-            }}
-          />
-        )}
-        {typeof selected === "number" && (
+        <div className="mx-auto mb-4 max-w-4xl">
+          <Button size="sm" variant="outline" onClick={backToList}>
+            ← Lista pacjentów
+          </Button>
+        </div>
+        {selected === "new" ? (
+          <PatientForm onCancel={backToList} onSaved={(id) => setSelected(id)} />
+        ) : (
           <PatientCardView
             key={selected}
             id={selected}
@@ -109,11 +82,111 @@ export function PatientsPage({ sites, staff, canEdit, canSeeHistory, onOpenDay }
             canEdit={canEdit}
             canSeeHistory={canSeeHistory}
             onOpenDay={onOpenDay}
-            onChanged={(name) => setQ(name)}
+            onChanged={() => setReloadKey((k) => k + 1)}
           />
         )}
       </main>
-    </div>
+    );
+  }
+
+  const total = result?.total ?? 0;
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const from = total ? (page - 1) * PAGE_SIZE + 1 : 0;
+  const to = Math.min(page * PAGE_SIZE, total);
+
+  return (
+    <main className="min-h-0 flex-1 overflow-auto p-4">
+      <div className="mx-auto max-w-5xl space-y-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-64 flex-1 space-y-1">
+            <Label htmlFor="patient-search">Szukaj pacjenta</Label>
+            <Input
+              id="patient-search"
+              type="search"
+              placeholder="Nazwisko, imię albo numer telefonu"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              autoFocus
+              autoComplete="off"
+            />
+          </div>
+          {canEdit && (
+            <Button variant="outline" onClick={() => setSelected("new")}>
+              + Nowy pacjent
+            </Button>
+          )}
+        </div>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <div className="overflow-hidden rounded-md border border-border bg-surface">
+          <table className="w-full table-fixed text-sm">
+            <thead className="bg-muted text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 font-medium">Nazwisko i imię</th>
+                <th className="w-44 px-3 py-2 font-medium">Telefon</th>
+                <th className="hidden w-40 px-3 py-2 font-medium sm:table-cell">Data urodzenia</th>
+              </tr>
+            </thead>
+            <tbody className={`divide-y divide-border ${loading ? "opacity-60" : ""}`}>
+              {result?.items.map((p) => (
+                <tr
+                  key={p.id}
+                  tabIndex={0}
+                  className="cursor-pointer hover:bg-muted focus:bg-muted focus:outline-none"
+                  onClick={() => setSelected(p.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelected(p.id);
+                    }
+                  }}
+                >
+                  <td className="px-3 py-2 font-medium">
+                    {p.lastName} {p.firstName}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums">
+                    {p.phone ?? <span className="text-muted-foreground">brak</span>}
+                  </td>
+                  <td className="hidden px-3 py-2 tabular-nums sm:table-cell">
+                    {p.birthDate ? formatDate(p.birthDate) : <span className="text-muted-foreground">—</span>}
+                  </td>
+                </tr>
+              ))}
+              {result && result.items.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="px-3 py-6 text-center text-muted-foreground">
+                    {query ? `Nikogo nie znaleziono dla „${query}”.` : "Brak pacjentów."}
+                  </td>
+                </tr>
+              )}
+              {!result && !error && (
+                <tr>
+                  <td colSpan={3} className="px-3 py-6 text-center text-muted-foreground">
+                    Ładowanie…
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <nav className="flex flex-wrap items-center justify-between gap-2 text-sm" aria-label="Strony listy pacjentów">
+          <span className="text-muted-foreground">{total ? `${from}–${to} z ${total}` : "0 pacjentów"}</span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+              ← Poprzednia
+            </Button>
+            <span className="tabular-nums">
+              Strona {page} z {pages}
+            </span>
+            <Button size="sm" variant="outline" disabled={page >= pages} onClick={() => setPage(page + 1)}>
+              Następna →
+            </Button>
+          </div>
+        </nav>
+      </div>
+    </main>
   );
 }
 
