@@ -57,19 +57,25 @@ pnpm --filter horarium seed:demo
 
 ## Preview (demo data only)
 
-To show the app to others, the Mac runs a preview in Docker: Horarium built from the current checkout, its own database with made-up demo data (`preview/start.sh` seeds it on first start) and a Cloudflare quick tunnel that gives it a public `https://….trycloudflare.com` address. It never touches the clinic database: real patient data stays on the clinic server. All three containers restart with Docker, so the preview survives a reboot.
+The Mac keeps a local preview at http://127.0.0.1:8791 that follows the most recently updated open pull request by itself (or `main` when none is open). A launchd job runs `preview/watch.sh` every 2 minutes: it asks GitHub for the newest open PR, and when its commit changed, checks it out in its own clone (`.preview/src`, never your working copy), rebuilds the Docker image and shows a macOS notification when it is ready. The preview has its own database with made-up demo data (`preview/start.sh` seeds it) and never touches the clinic database: real patient data stays on the clinic server.
 
-Put the password for the demo logins `recepcja` and `admin` into `apps/horarium/preview/.env` (not committed), then start or update:
+One-time setup (Docker Desktop must be running). It generates the password for the demo logins `recepcja` and `admin` and prints it; it is kept in `.preview/.env`:
 
 ```bash
-echo "CLINIC_PASSWORD=your-own-password" > apps/horarium/preview/.env
+apps/horarium/preview/install.sh
+```
+
+State and logs: `.preview/status.json` (what is shown and whether it built), `.preview/watch.log`. Remove with `install.sh --uninstall`.
+
+To show the app to others, share it publicly only while needed (a `https://….trycloudflare.com` address; off by default and after a restart):
+
+```bash
+apps/horarium/preview/share.sh
 ```
 
 ```bash
-apps/horarium/preview/up.sh
+apps/horarium/preview/share.sh stop
 ```
-
-Running it again after `git pull` rebuilds the app and keeps the address and the data. `--new-url` restarts the tunnel and gives a new address. The address also changes when Docker restarts.
 
 ## Tests
 

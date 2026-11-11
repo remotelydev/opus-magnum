@@ -1,5 +1,7 @@
-# Horarium preview with made-up demo data, shared through a Cloudflare quick tunnel.
-# Start or update with preview/up.sh. Its own database: never point this at the clinic database.
+# Horarium preview on the Mac with made-up demo data. Started and updated by preview/watch.sh
+# (installed with preview/install.sh). Its own database: never point this at the clinic database.
+# watch.sh uses its own copy of this file (in .preview) and points HORARIUM_SRC at the checkout it builds.
+# Shared publicly only on demand with preview/share.sh.
 services:
   db:
     image: postgres:16
@@ -16,22 +18,16 @@ services:
       retries: 30
   app:
     build:
-      context: ../../..
+      context: ${HORARIUM_SRC:-../../..}
       dockerfile: apps/horarium/Dockerfile
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://horarium:horarium@db:5432/horarium_preview
-      CLINIC_PASSWORD: ${CLINIC_PASSWORD:?set CLINIC_PASSWORD in apps/horarium/preview/.env}
+      CLINIC_PASSWORD: ${CLINIC_PASSWORD:?CLINIC_PASSWORD missing in .preview/.env}
     ports:
       - "127.0.0.1:8791:8790"
     depends_on:
       db:
         condition: service_healthy
-  tunnel:
-    image: cloudflare/cloudflared:2025.10.0
-    restart: unless-stopped
-    command: tunnel --no-autoupdate --url http://app:8790
-    depends_on:
-      - app
 volumes:
   preview-db:
