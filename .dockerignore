@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/.env
+**/.env*.local
+.git
+apps/reception-api/transcripts
+apps/reception-api/data
+apps/reception-api/versum-export
+**/.cloudflared

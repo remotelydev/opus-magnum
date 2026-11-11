@@ -55,6 +55,16 @@ pnpm --filter horarium seed:demo
 - Health: http://127.0.0.1:8790/health
 - Log in: `POST /api/auth/login` with `{"login","password"}`. The response has a token (send as `Authorization: Bearer …`) and sets an HttpOnly `session` cookie for the browser UI.
 
+## Preview (demo data only)
+
+`Dockerfile` builds the API and the UI into one image, and `preview/start.sh` migrates, fills an empty database with made-up demo data and starts the server. It is meant for a hosted preview of every branch or pull request (config for Railway in `railway.json`), never for the clinic: the preview gets its own empty database and real patient data never leaves the mini-PC.
+
+Set `CLINIC_PASSWORD` on the preview so the demo logins `recepcja` and `admin` do not use the public default password.
+
+```bash
+docker build -f apps/horarium/Dockerfile -t horarium-preview .
+```
+
 ## Tests
 
 Tests need an empty database they can wipe:
