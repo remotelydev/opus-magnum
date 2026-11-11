@@ -8,6 +8,7 @@ import {
   DAY_START_MIN,
   SLOT_MIN,
   formatMinutes,
+  slotAt,
   fromClinicTime,
   layoutColumn,
   toClinicTime,
@@ -61,6 +62,9 @@ export function DayView({
   const [booking, setBooking] = useState<Booking | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [showCancelled, setShowCancelled] = useState(true);
+  /** The free slot under the mouse, as in Versum: its start time shows in the slot's top-left corner.
+   *  Mouse only: touch screens have no hover and keep the plain tap-to-book. */
+  const [hover, setHover] = useState<Booking | null>(null);
   const dragOffsetMin = useRef(0);
 
   const byStaff = useMemo(() => {
@@ -74,11 +78,9 @@ export function DayView({
     return map;
   }, [staff, appointments, schedules, showCancelled]);
 
-  const minutesFromEvent = (e: { clientY: number; currentTarget: HTMLElement }) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const raw = DAY_START_MIN + (e.clientY - rect.top) / PX_PER_MIN;
-    return Math.min(Math.max(Math.floor(raw / SLOT_MIN) * SLOT_MIN, DAY_START_MIN), DAY_END_MIN - SLOT_MIN);
-  };
+  // The click and the hover label use the same maths, so the time shown is the slot that opens.
+  const minutesFromEvent = (e: { clientY: number; currentTarget: HTMLElement }) =>
+    slotAt(e.clientY - e.currentTarget.getBoundingClientRect().top, PX_PER_MIN);
 
   const onDrop = async (e: DragEvent<HTMLDivElement>, staffId: number) => {
     e.preventDefault();
@@ -192,6 +194,15 @@ export function DayView({
                     if (!canEdit || e.target !== e.currentTarget) return;
                     setBooking({ staffId: s.id, startMin: minutesFromEvent(e) });
                   }}
+                  onPointerMove={(e) => {
+                    if (!canEdit || e.pointerType !== "mouse" || e.target !== e.currentTarget || e.buttons) {
+                      if (hover) setHover(null);
+                      return;
+                    }
+                    const startMin = minutesFromEvent(e);
+                    if (hover?.staffId !== s.id || hover.startMin !== startMin) setHover({ staffId: s.id, startMin });
+                  }}
+                  onPointerLeave={() => setHover(null)}
                   onDragOver={(e) => canEdit && e.preventDefault()}
                   onDrop={(e) => onDrop(e, s.id)}
                   data-testid={`column-${s.id}`}
@@ -222,6 +233,15 @@ export function DayView({
                       style={{ top: (h - DAY_START_MIN) * PX_PER_MIN }}
                     />
                   ))}
+                  {hover?.staffId === s.id && (
+                    <div
+                      className="pointer-events-none absolute inset-x-0 rounded-sm bg-primary/10 px-1 text-[11px] font-medium leading-4 text-foreground ring-1 ring-inset ring-primary/40"
+                      style={{ top: (hover.startMin - DAY_START_MIN) * PX_PER_MIN, height: SLOT_MIN * PX_PER_MIN }}
+                      data-testid="hover-slot"
+                    >
+                      {formatMinutes(hover.startMin)}
+                    </div>
+                  )}
                   {placed.map(({ item: { a, startMin, endMin }, top, height, lane, lanes }) => (
                     <button
                       key={a.id}
