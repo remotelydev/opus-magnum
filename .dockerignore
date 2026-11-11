@@ -9,3 +9,4 @@ apps/reception-api/transcripts
 apps/reception-api/data
 apps/reception-api/versum-export
 **/.cloudflared
+.preview

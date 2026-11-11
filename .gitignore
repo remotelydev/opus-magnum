@@ -42,3 +42,6 @@ apps/reception-api/.cloudflared/
 
 # reception-api Versum export (clinic data, never commit)
 apps/reception-api/versum-export/
+
+# local Horarium preview state on the Mac (own clone, password, logs)
+.preview/
