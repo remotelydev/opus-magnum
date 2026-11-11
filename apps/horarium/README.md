@@ -55,6 +55,22 @@ pnpm --filter horarium seed:demo
 - Health: http://127.0.0.1:8790/health
 - Log in: `POST /api/auth/login` with `{"login","password"}`. The response has a token (send as `Authorization: Bearer …`) and sets an HttpOnly `session` cookie for the browser UI.
 
+## Preview (demo data only)
+
+To show the app to others, the Mac runs a preview in Docker: Horarium built from the current checkout, its own database with made-up demo data (`preview/start.sh` seeds it on first start) and a Cloudflare quick tunnel that gives it a public `https://….trycloudflare.com` address. It never touches the clinic database: real patient data stays on the clinic server. All three containers restart with Docker, so the preview survives a reboot.
+
+Put the password for the demo logins `recepcja` and `admin` into `apps/horarium/preview/.env` (not committed), then start or update:
+
+```bash
+echo "CLINIC_PASSWORD=your-own-password" > apps/horarium/preview/.env
+```
+
+```bash
+apps/horarium/preview/up.sh
+```
+
+Running it again after `git pull` rebuilds the app and keeps the address and the data. `--new-url` restarts the tunnel and gives a new address. The address also changes when Docker restarts.
+
 ## Tests
 
 Tests need an empty database they can wipe:
