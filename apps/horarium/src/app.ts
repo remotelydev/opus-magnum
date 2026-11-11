@@ -5,6 +5,7 @@ import { audit, type Db } from "./db.js";
 import { createLoginLimiter, type LoginLimiter } from "./login-limit.js";
 import { normalizePhone } from "./phone.js";
 import { registerServices } from "./services.js";
+import { registerSettings } from "./settings.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -219,55 +220,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
   // --- reference data ---------------------------------------------------------------------
   app.get("/api/sites", { preHandler: guard(ALL) }, async () => (await db.query("SELECT * FROM sites ORDER BY name")).rows);
 
-  app.get("/api/staff", { preHandler: guard(ALL) }, async () => {
-    const { rows } = await db.query(
-      `SELECT st.id, st.name, st.kind, st.active, COALESCE(array_agg(ss.site_id ORDER BY ss.site_id)
-              FILTER (WHERE ss.site_id IS NOT NULL), '{}') AS sites
-         FROM staff st LEFT JOIN staff_sites ss ON ss.staff_id = st.id
-        GROUP BY st.id ORDER BY st.name`,
-    );
-    return rows;
-  });
-
-  app.post<{ Body: { name: string; kind?: "person" | "calendar"; sites: string[] } }>(
-    "/api/staff",
-    {
-      preHandler: guard(ADMIN),
-      schema: {
-        body: {
-          type: "object",
-          required: ["name", "sites"],
-          properties: {
-            name: { type: "string", minLength: 1 },
-            kind: { enum: ["person", "calendar"] },
-            sites: { type: "array", items: { type: "string" }, minItems: 1 },
-          },
-        },
-      },
-    },
-    async (req, reply) => {
-      const client = await db.connect();
-      try {
-        await client.query("BEGIN");
-        const { rows } = await client.query<{ id: number }>(
-          "INSERT INTO staff (name, kind) VALUES ($1, $2) RETURNING id",
-          [req.body.name, req.body.kind ?? "person"],
-        );
-        for (const site of req.body.sites) {
-          await client.query("INSERT INTO staff_sites (staff_id, site_id) VALUES ($1, $2)", [rows[0].id, site]);
-        }
-        await audit(client, req.user!.id, "staff.create", "staff", rows[0].id, req.body);
-        await client.query("COMMIT");
-        return reply.code(201).send({ id: rows[0].id });
-      } catch (error) {
-        await client.query("ROLLBACK");
-        throw error;
-      } finally {
-        client.release();
-      }
-    },
-  );
-
+  registerSettings(app, db, { read: guard(ALL), write: guard(WRITE_ROLES), admin: guard(ADMIN) }, opts.publicOrigins ?? []);
   registerServices(app, db, { read: guard(ALL), admin: guard(ADMIN) }, opts.publicOrigins ?? []);
 
   // --- patients ---------------------------------------------------------------------------

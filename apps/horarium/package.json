@@ -11,7 +11,7 @@
     "migrate": "tsx scripts/migrate.ts",
     "user:create": "tsx scripts/create-user.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
-    "test": "TZ=Europe/Warsaw tsx --test src/**/*.test.ts web/src/**/*.test.ts",
+    "test": "TZ=Europe/Warsaw tsx --test --test-concurrency=1 src/**/*.test.ts web/src/**/*.test.ts",
     "lint": "tsc --noEmit && tsc --noEmit -p web"
   },
   "dependencies": {

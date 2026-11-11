@@ -1,10 +1,13 @@
 import {
   ArrowRightStartOnRectangleIcon,
+  BuildingStorefrontIcon,
   CalendarDaysIcon,
   ChevronDoubleLeftIcon,
   ChevronDoubleRightIcon,
   MoonIcon,
   SunIcon,
+  ClockIcon,
+  IdentificationIcon,
   TagIcon,
   UsersIcon,
 } from "@heroicons/react/24/outline";
@@ -12,7 +15,7 @@ import type { ComponentType, ReactNode, SVGProps } from "react";
 import type { User } from "../lib/api.ts";
 import { useTheme } from "./ThemeToggle.tsx";
 
-export type View = "calendar" | "patients" | "services";
+export type View = "calendar" | "patients" | "services" | "staff" | "schedule" | "opening";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -44,7 +47,17 @@ export function Sidebar({
   const items: Array<{ id: View; label: string; icon: Icon }> = [
     { id: "calendar", label: "Terminarz", icon: CalendarDaysIcon },
     { id: "patients", label: "Pacjenci", icon: UsersIcon },
-    ...(user.role === "admin" ? [{ id: "services" as const, label: "Usługi i cennik", icon: TagIcon }] : []),
+  ];
+  const admin = user.role === "admin";
+  const settings: Array<{ id: View; label: string; icon: Icon }> = [
+    ...(user.role !== "doctor" ? [{ id: "schedule" as const, label: "Grafik pracy", icon: ClockIcon }] : []),
+    ...(admin
+      ? [
+          { id: "staff" as const, label: "Pracownicy", icon: IdentificationIcon },
+          { id: "opening" as const, label: "Godziny otwarcia", icon: BuildingStorefrontIcon },
+          { id: "services" as const, label: "Usługi i cennik", icon: TagIcon },
+        ]
+      : []),
   ];
   const initials = user.name
     .split(/\s+/)
@@ -75,6 +88,24 @@ export function Sidebar({
 
       <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-2" aria-label="Sekcje">
         {items.map((item) => (
+          <Item
+            key={item.id}
+            icon={item.icon}
+            label={item.label}
+            collapsed={collapsed}
+            active={view === item.id}
+            onClick={() => onView(item.id)}
+          />
+        ))}
+        {settings.length > 0 &&
+          (collapsed ? (
+            <div className="mx-2 my-2 border-t border-border" role="separator" />
+          ) : (
+            <div className="px-2.5 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Ustawienia
+            </div>
+          ))}
+        {settings.map((item) => (
           <Item
             key={item.id}
             icon={item.icon}

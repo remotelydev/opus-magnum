@@ -1,6 +1,6 @@
 # Database schema
 
-Source of truth: `migrations/001_init.sql`. PostgreSQL 16.
+Source of truth: `migrations/` (`001_init.sql`, `002_settings.sql`). PostgreSQL 16.
 
 ```mermaid
 erDiagram
@@ -16,6 +16,9 @@ erDiagram
     users ||--o{ sessions : "logged in"
     staff |o--o| users : "login of"
     users ||--o{ audit_log : "did"
+    sites ||--o{ opening_hours : "open"
+    sites ||--o{ opening_exceptions : "holidays"
+    staff ||--o{ work_patterns : "weekly pattern"
 
     sites {
         text id PK "turek, poddebice"
@@ -25,6 +28,9 @@ erDiagram
         serial id PK
         text name
         text kind "person | calendar"
+        text title "stanowisko"
+        text phone
+        text email
         bool active
         int sort_order
     }
@@ -101,6 +107,27 @@ erDiagram
         text entity_id
         jsonb changes
     }
+    opening_hours {
+        text site_id PK, FK
+        smallint weekday PK "1 = Monday ... 7 = Sunday"
+        time opens "clinic time"
+        time closes
+    }
+    opening_exceptions {
+        text site_id PK, FK
+        date day PK
+        time opens "null = closed"
+        time closes
+        text note
+    }
+    work_patterns {
+        serial id PK
+        int staff_id FK
+        smallint weekday
+        text site_id FK
+        time starts
+        time ends
+    }
     import_refs {
         text source PK
         text entity PK
@@ -112,4 +139,6 @@ erDiagram
 Rules the database enforces:
 - `appointments_no_overlap`: one staff member cannot have two live appointments at once (cancelled and no-show do not count).
 - `price_max >= price_min`, `ends_at > starts_at`, durations above zero.
+- Opening hours and work patterns are clinic-local times (Europe/Warsaw); a weekday without an `opening_hours` row is closed.
+- `work_patterns` is the template; `schedules` holds the actual blocks the calendar shows. Generating from the pattern rewrites only `work` blocks, never absences.
 - `import_refs` is used only by a one-off data import, so it can run again without duplicates. The app never reads it; it can be dropped after the move.
