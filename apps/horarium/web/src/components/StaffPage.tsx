@@ -47,11 +47,11 @@ export function StaffPage({ onOpenSchedule }: { onOpenSchedule: (staffId: number
   }, [staff, filter, site, showInactive]);
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto p-4">
+    <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-4">
       <div className="mx-auto max-w-5xl space-y-4">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-lg font-semibold">Pracownicy</h1>
-          <div className="w-56">
+          <div className="w-full sm:w-56">
             <Input
               className="h-8"
               placeholder="Szukaj pracownika"
@@ -60,7 +60,7 @@ export function StaffPage({ onOpenSchedule }: { onOpenSchedule: (staffId: number
               aria-label="Szukaj pracownika"
             />
           </div>
-          <div className="w-40">
+          <div className="w-full sm:w-40">
             <Select className="h-8" value={site} onChange={(e) => setSite(e.target.value)} aria-label="Placówka">
               <option value="">Wszystkie placówki</option>
               {sites.map((s) => (
@@ -89,9 +89,9 @@ export function StaffPage({ onOpenSchedule }: { onOpenSchedule: (staffId: number
             <thead className="border-b border-border bg-muted text-left text-xs text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 font-medium">Imię i nazwisko</th>
-                <th className="px-3 py-2 font-medium">Placówki</th>
-                <th className="px-3 py-2 font-medium">Kontakt</th>
-                <th className="px-3 py-2 font-medium">Status</th>
+                <th className="hidden px-3 py-2 font-medium sm:table-cell">Placówki</th>
+                <th className="hidden px-3 py-2 font-medium md:table-cell">Kontakt</th>
+                <th className="hidden px-3 py-2 font-medium lg:table-cell">Status</th>
                 <th />
               </tr>
             </thead>
@@ -103,17 +103,22 @@ export function StaffPage({ onOpenSchedule }: { onOpenSchedule: (staffId: number
                     <div className="text-xs text-muted-foreground">
                       {s.kind === "calendar" ? "kalendarz (nie osoba)" : s.title || "—"}
                     </div>
+                    {/* Phones: the columns hidden on the right, folded under the name. */}
+                    <div className="text-xs text-muted-foreground sm:hidden">
+                      {s.sites.map((id) => siteName.get(id) ?? id).join(", ")}
+                      {!s.active && " · nieaktywny"}
+                    </div>
                   </td>
-                  <td className="px-3 py-2 text-muted-foreground">
+                  <td className="hidden px-3 py-2 text-muted-foreground sm:table-cell">
                     {s.sites.map((id) => siteName.get(id) ?? id).join(", ")}
                   </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                  <td className="hidden px-3 py-2 text-xs text-muted-foreground md:table-cell">
                     {s.phone && <div>{s.phone}</div>}
                     {s.email && <div>{s.email}</div>}
                     {!s.phone && !s.email && "—"}
                   </td>
-                  <td className="w-28 px-3 py-2 text-xs text-muted-foreground">{s.active ? "aktywny" : "nieaktywny"}</td>
-                  <td className="w-44 px-3 py-2 text-right whitespace-nowrap">
+                  <td className="hidden w-28 px-3 py-2 text-xs text-muted-foreground lg:table-cell">{s.active ? "aktywny" : "nieaktywny"}</td>
+                  <td className="px-2 py-2 text-right whitespace-nowrap sm:w-44 sm:px-3">
                     <Button variant="ghost" size="sm" onClick={() => onOpenSchedule(s.id)}>
                       Grafik
                     </Button>
@@ -200,7 +205,7 @@ function StaffForm({
           <Label htmlFor="st-name">Imię i nazwisko (tak, jak w terminarzu)</Label>
           <Input id="st-name" value={form.name} onChange={(e) => set("name", e.target.value)} required autoFocus />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
             <Label htmlFor="st-kind">Rodzaj</Label>
             <Select id="st-kind" value={form.kind} onChange={(e) => set("kind", e.target.value as StaffInput["kind"])}>
@@ -218,7 +223,7 @@ function StaffForm({
             />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
             <Label htmlFor="st-phone">Telefon</Label>
             <Input id="st-phone" type="tel" value={form.phone} onChange={(e) => set("phone", e.target.value)} />

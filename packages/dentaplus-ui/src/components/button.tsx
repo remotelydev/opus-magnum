@@ -10,9 +10,10 @@ const VARIANTS = {
 } as const;
 
 const SIZES = {
-  sm: "h-7 gap-1 px-2.5 text-xs",
-  md: "h-9 gap-1.5 px-3.5 text-sm",
-  icon: "size-7 [&_svg]:size-4",
+  // On touch screens (phones, tablets) buttons grow to a comfortable finger target; mouse sizes stay as they were.
+  sm: "h-7 gap-1 px-2.5 text-xs pointer-coarse:h-9 pointer-coarse:px-3 pointer-coarse:text-sm",
+  md: "h-9 gap-1.5 px-3.5 text-sm pointer-coarse:h-10",
+  icon: "size-7 [&_svg]:size-4 pointer-coarse:size-9 pointer-coarse:[&_svg]:size-5",
 } as const;
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

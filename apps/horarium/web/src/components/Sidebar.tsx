@@ -1,5 +1,6 @@
 import {
   ArrowRightStartOnRectangleIcon,
+  Bars3Icon,
   BuildingStorefrontIcon,
   CalendarDaysIcon,
   ChevronDoubleLeftIcon,
@@ -10,6 +11,7 @@ import {
   IdentificationIcon,
   TagIcon,
   UsersIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import type { ComponentType, ReactNode, SVGProps } from "react";
 import type { User } from "../lib/api.ts";
@@ -35,13 +37,19 @@ export function Sidebar({
   collapsed,
   onToggleCollapsed,
   onLogout,
+  onClose,
+  className,
 }: {
   user: User;
   view: View;
   onView: (view: View) => void;
   collapsed: boolean;
-  onToggleCollapsed: () => void;
+  /** Left out on phones, where the panel opens as a drawer instead of collapsing. */
+  onToggleCollapsed?: () => void;
   onLogout: () => void;
+  /** Phone drawer: shows a close button in the header. */
+  onClose?: () => void;
+  className?: string;
 }) {
   const theme = useTheme();
   const items: Array<{ id: View; label: string; icon: Icon }> = [
@@ -61,6 +69,7 @@ export function Sidebar({
   ];
   const initials = user.name
     .split(/\s+/)
+    .map((part) => part.replace(/[^\p{L}]/gu, ""))
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0]!.toUpperCase())
@@ -71,6 +80,7 @@ export function Sidebar({
       className={cx(
         "flex shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-150",
         collapsed ? "w-16" : "w-60",
+        className,
       )}
       aria-label="Panel boczny"
     >
@@ -83,6 +93,16 @@ export function Sidebar({
             <div className="text-sm font-semibold text-foreground">Horarium</div>
             <div className="text-xs text-muted-foreground">DentaPlus+</div>
           </div>
+        )}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Zamknij menu"
+            className="-mr-1 ml-auto flex size-10 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <XMarkIcon className="size-6" aria-hidden="true" />
+          </button>
         )}
       </div>
 
@@ -117,7 +137,7 @@ export function Sidebar({
         ))}
       </nav>
 
-      <div className="flex flex-col gap-1 border-t border-border p-2">
+      <div className="flex flex-col gap-1 border-t border-border p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         <div
           className={cx("mb-1 flex items-center gap-2.5 rounded-md py-1.5", collapsed ? "justify-center" : "px-2")}
           title={collapsed ? `${user.name} (${ROLE_LABEL[user.role]})` : undefined}
@@ -140,14 +160,16 @@ export function Sidebar({
           onClick={theme.toggle}
         />
         <Item icon={ArrowRightStartOnRectangleIcon} label="Wyloguj" collapsed={collapsed} onClick={onLogout} />
-        <Item
-          icon={collapsed ? ChevronDoubleRightIcon : ChevronDoubleLeftIcon}
-          label="Zwiń panel"
-          title={collapsed ? "Rozwiń panel" : "Zwiń panel"}
-          collapsed={collapsed}
-          onClick={onToggleCollapsed}
-          ariaExpanded={!collapsed}
-        />
+        {onToggleCollapsed && (
+          <Item
+            icon={collapsed ? ChevronDoubleRightIcon : ChevronDoubleLeftIcon}
+            label="Zwiń panel"
+            title={collapsed ? "Rozwiń panel" : "Zwiń panel"}
+            collapsed={collapsed}
+            onClick={onToggleCollapsed}
+            ariaExpanded={!collapsed}
+          />
+        )}
       </div>
     </aside>
   );
@@ -180,7 +202,7 @@ function Item({
       aria-label={collapsed || title ? name : undefined}
       title={collapsed || title ? name : undefined}
       className={cx(
-        "flex h-9 items-center gap-3 rounded-md text-sm transition-colors",
+        "flex h-9 items-center gap-3 rounded-md text-sm transition-colors pointer-coarse:h-11",
         collapsed ? "justify-center" : "px-2.5",
         active
           ? "bg-primary-soft font-medium text-primary"
@@ -190,6 +212,45 @@ function Item({
       <Icon className="size-5 shrink-0" aria-hidden="true" />
       {!collapsed && <span className="truncate">{label}</span>}
     </button>
+  );
+}
+
+/** Phones: the sections people open most, always at the thumb, and the full menu as a drawer. */
+export function BottomNav({
+  view,
+  onView,
+  onMenu,
+  menuOpen,
+}: {
+  view: View;
+  onView: (view: View) => void;
+  onMenu: () => void;
+  menuOpen: boolean;
+}) {
+  const tab = (active: boolean) =>
+    cx(
+      "flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium",
+      active ? "text-primary" : "text-muted-foreground",
+    );
+  const settingsActive = view !== "calendar" && view !== "patients";
+  return (
+    <nav
+      className="flex shrink-0 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
+      aria-label="Nawigacja"
+    >
+      <button type="button" className={cx("h-14", tab(view === "calendar"))} onClick={() => onView("calendar")} aria-current={view === "calendar" ? "page" : undefined}>
+        <CalendarDaysIcon className="size-6" aria-hidden="true" />
+        Terminarz
+      </button>
+      <button type="button" className={cx("h-14", tab(view === "patients"))} onClick={() => onView("patients")} aria-current={view === "patients" ? "page" : undefined}>
+        <UsersIcon className="size-6" aria-hidden="true" />
+        Pacjenci
+      </button>
+      <button type="button" className={cx("h-14", tab(settingsActive || menuOpen))} onClick={onMenu} aria-expanded={menuOpen} aria-haspopup="dialog">
+        <Bars3Icon className="size-6" aria-hidden="true" />
+        Menu
+      </button>
+    </nav>
   );
 }
 

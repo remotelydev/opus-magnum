@@ -8,7 +8,7 @@ import { SchedulePage } from "./components/SchedulePage.tsx";
 import { ServicesPage } from "./components/ServicesPage.tsx";
 import { StaffPage } from "./components/StaffPage.tsx";
 import { Login } from "./components/Login.tsx";
-import { Sidebar, type View } from "./components/Sidebar.tsx";
+import { BottomNav, Sidebar, type View } from "./components/Sidebar.tsx";
 import { api, ApiError, type Service, type Site, type Staff, type User } from "./lib/api.ts";
 import { readCollapsed, saveCollapsed } from "./lib/sidebar.ts";
 import { addDays, formatDay, todayInClinic } from "./lib/time.ts";
@@ -48,6 +48,16 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [view, setView] = useState<View>("calendar");
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [scheduleStaff, setScheduleStaff] = useState<number | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  // One person's column only (handy on a phone), or null for everyone at the site.
+  const [focusStaff, setFocusStaff] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOpen]);
 
   const toggleCollapsed = () => {
     setCollapsed((was) => {
@@ -70,6 +80,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   const chooseSite = (id: string) => {
     setSite(id);
+    setFocusStaff(null);
     try {
       localStorage.setItem(SITE_KEY, id);
     } catch {
@@ -82,24 +93,45 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
     onLogout();
   };
 
+  const openView = (next: View) => {
+    if (next === "schedule") setScheduleStaff(null);
+    setView(next);
+    setMenuOpen(false);
+  };
+  const siteStaff = staff.filter((s) => s.active && s.sites.includes(site));
+
   return (
     <div className="flex h-full bg-background text-foreground">
-      <Sidebar
-        user={user}
-        view={view}
-        onView={(next) => {
-          if (next === "schedule") setScheduleStaff(null);
-          setView(next);
-        }}
-        collapsed={collapsed}
-        onToggleCollapsed={toggleCollapsed}
-        onLogout={logout}
-      />
+      {/* Tablets and desktops: the side panel. Phones: a bottom bar and the same panel as a drawer. */}
+      <div className="hidden md:flex">
+        <Sidebar
+          user={user}
+          view={view}
+          onView={openView}
+          collapsed={collapsed}
+          onToggleCollapsed={toggleCollapsed}
+          onLogout={logout}
+        />
+      </div>
+      {menuOpen && (
+        <div className="fixed inset-0 z-50 flex md:hidden" role="dialog" aria-modal="true" aria-label="Menu">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setMenuOpen(false)} />
+          <Sidebar
+            className="relative h-full max-w-[85vw] shadow-xl"
+            user={user}
+            view={view}
+            onView={openView}
+            collapsed={false}
+            onLogout={logout}
+            onClose={() => setMenuOpen(false)}
+          />
+        </div>
+      )}
       <main className="flex min-w-0 flex-1 flex-col">
         {view === "calendar" && (
-          <header className="flex min-h-14 flex-wrap items-center gap-3 border-b border-border bg-surface px-4 py-2">
+          <header className="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-surface px-3 py-2 sm:px-4">
             <h1 className="mr-1 text-base font-semibold capitalize">{formatDay(date)}</h1>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 max-sm:order-last max-sm:w-full">
               <Button
                 variant="outline"
                 size="icon"
@@ -123,7 +155,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
                 type="date"
                 value={date}
                 onChange={(e) => e.target.value && setDate(e.target.value)}
-                className="ml-1 h-7 rounded-md border border-input bg-surface px-2 text-xs"
+                className="ml-1 h-7 min-w-0 rounded-md border border-input bg-surface px-2 text-xs max-sm:flex-1 pointer-coarse:h-9"
                 aria-label="Wybierz dzień"
               />
             </div>
@@ -138,7 +170,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
                   role="tab"
                   aria-selected={s.id === site}
                   onClick={() => chooseSite(s.id)}
-                  className={`px-3 py-1 text-xs ${s.id === site ? "bg-primary text-primary-foreground" : "bg-surface hover:bg-muted"}`}
+                  className={`px-3 py-1 text-xs pointer-coarse:py-2 ${s.id === site ? "bg-primary text-primary-foreground" : "bg-surface hover:bg-muted"}`}
                 >
                   {s.name}
                 </button>
@@ -177,12 +209,15 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
             key={`${site}-${date}`}
             site={site}
             date={date}
-            staff={staff.filter((s) => s.active && s.sites.includes(site))}
+            staff={siteStaff}
+            focusStaff={focusStaff}
+            onFocusStaff={setFocusStaff}
             services={services}
             canEdit={user.role !== "doctor"}
             canSeeHistory={user.role === "admin"}
           />
         )}
+        <BottomNav view={view} onView={openView} onMenu={() => setMenuOpen((o) => !o)} menuOpen={menuOpen} />
       </main>
     </div>
   );

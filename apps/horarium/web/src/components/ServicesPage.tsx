@@ -56,11 +56,11 @@ export function ServicesPage() {
   const categories = useMemo(() => [...new Set(services.map((s) => s.category))].sort(), [services]);
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto p-4">
+    <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-4">
       <div className="mx-auto max-w-5xl space-y-4">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-lg font-semibold">Usługi i cennik</h1>
-          <div className="w-60">
+          <div className="w-full sm:w-60">
             <Input
               className="h-8"
               placeholder="Szukaj usługi"
@@ -103,13 +103,19 @@ export function ServicesPage() {
                     <td className="px-3 py-2">
                       <div className="font-medium">{s.name}</div>
                       {s.description && <div className="text-xs text-muted-foreground">{s.description}</div>}
+                      {/* Phones: time, price and status folded under the name. */}
+                      <div className="text-xs text-muted-foreground sm:hidden">
+                        {s.durationMinutes} min · <span className="text-foreground">{formatPrice(s)}</span>
+                        {" · "}
+                        {!s.active ? "wyłączona" : s.showOnline ? "na stronie" : "tylko recepcja"}
+                      </div>
                     </td>
-                    <td className="w-20 px-3 py-2 text-muted-foreground">{s.durationMinutes} min</td>
-                    <td className="w-48 px-3 py-2">{formatPrice(s)}</td>
-                    <td className="w-36 px-3 py-2 text-xs text-muted-foreground">
+                    <td className="hidden w-20 px-3 py-2 text-muted-foreground sm:table-cell">{s.durationMinutes} min</td>
+                    <td className="hidden w-48 px-3 py-2 sm:table-cell">{formatPrice(s)}</td>
+                    <td className="hidden w-36 px-3 py-2 text-xs text-muted-foreground md:table-cell">
                       {!s.active ? "wyłączona" : s.showOnline ? "na stronie" : "tylko recepcja"}
                     </td>
-                    <td className="w-20 px-3 py-2 text-right">
+                    <td className="w-20 px-2 py-2 text-right sm:px-3">
                       <Button variant="ghost" size="sm" onClick={() => setEditing(s)}>
                         Edytuj
                       </Button>
@@ -200,7 +206,7 @@ function ServiceForm({
   return (
     <Modal title={service ? "Edytuj usługę" : "Nowa usługa"} onClose={onClose}>
       <form onSubmit={submit} className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-[1fr_6rem] gap-3 sm:grid-cols-2">
           <div className="space-y-1">
             <Label htmlFor="s-cat">Kategoria</Label>
             <Input id="s-cat" list="s-cats" value={form.category} onChange={(e) => set("category", e.target.value)} required />
@@ -232,7 +238,7 @@ function ServiceForm({
           <Label htmlFor="s-desc">Opis na stronę (opcjonalnie)</Label>
           <Input id="s-desc" value={form.description} onChange={(e) => set("description", e.target.value)} />
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div className="space-y-1">
             <Label htmlFor="s-pmin">Cena od (zł)</Label>
             <Input id="s-pmin" inputMode="decimal" value={form.priceMin} onChange={(e) => set("priceMin", e.target.value)} />
@@ -247,7 +253,7 @@ function ServiceForm({
               onChange={(e) => set("priceMax", e.target.value)}
             />
           </div>
-          <div className="space-y-1">
+          <div className="col-span-2 space-y-1 sm:col-span-1">
             <Label htmlFor="s-pnote">Dopisek</Label>
             <Input id="s-pnote" placeholder="np. za ząb" value={form.priceNote} onChange={(e) => set("priceNote", e.target.value)} />
           </div>

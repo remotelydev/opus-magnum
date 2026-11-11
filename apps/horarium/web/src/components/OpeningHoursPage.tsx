@@ -23,7 +23,7 @@ export function OpeningHoursPage() {
   useEffect(load, [load]);
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto p-4">
+    <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-4">
       <div className="mx-auto max-w-5xl space-y-4">
         <h1 className="text-lg font-semibold">Godziny otwarcia</h1>
         <p className="text-xs text-muted-foreground">
@@ -93,17 +93,19 @@ function SiteCard({ site, onChanged }: { site: SiteOpening; onChanged: () => voi
   return (
     <section className="rounded-lg border border-border bg-surface">
       <h2 className="border-b border-border px-4 py-2.5 text-sm font-semibold">{site.name}</h2>
-      <div className="space-y-1 p-4">
+      <div className="space-y-1 p-3 sm:p-4">
         {rows.map((r, i) => (
-          <div key={i} className="flex items-center gap-3 text-sm">
-            <label className="flex w-36 items-center gap-2">
+          <div key={i} className="flex items-center gap-2 text-sm sm:gap-3">
+            <label className="flex w-20 shrink-0 items-center gap-2 pointer-coarse:min-h-10 sm:w-36">
               <input
                 type="checkbox"
                 checked={r.open}
                 onChange={(e) => setRow(i, { open: e.target.checked })}
                 aria-label={`${WEEKDAY_NAMES[i]} otwarte`}
               />
-              <span className="capitalize">{WEEKDAY_NAMES[i]}</span>
+              {/* Phones: "pon", "wto"… so both times fit beside the day. */}
+              <span className="capitalize sm:hidden">{WEEKDAY_NAMES[i].slice(0, 3)}</span>
+              <span className="capitalize max-sm:hidden">{WEEKDAY_NAMES[i]}</span>
             </label>
             {r.open ? (
               <>
@@ -126,7 +128,7 @@ function SiteCard({ site, onChanged }: { site: SiteOpening; onChanged: () => voi
             )}
           </div>
         ))}
-        <div className="flex items-center gap-2 pt-3">
+        <div className="flex flex-wrap items-center gap-2 pt-3">
           <Button size="sm" onClick={save} disabled={busy || !dirty}>
             {busy ? "Zapisywanie…" : "Zapisz godziny"}
           </Button>
@@ -184,16 +186,23 @@ function Exceptions({ site, onChanged }: { site: SiteOpening; onChanged: () => v
   const upcoming = site.exceptions.filter((x) => x.date >= today);
 
   return (
-    <div className="border-t border-border p-4">
+    <div className="border-t border-border p-3 sm:p-4">
       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Święta i zmienione dni</h3>
       {upcoming.length ? (
         <ul className="mb-3 divide-y divide-border text-sm">
           {upcoming.map((x) => (
-            <li key={x.date} className="flex items-center gap-3 py-1.5">
-              <span className="w-48">{formatDate(x.date)}</span>
-              <span className={x.closed ? "text-destructive" : ""}>{x.closed ? "zamknięte" : `${x.opens}–${x.closes}`}</span>
-              {x.note && <span className="truncate text-xs text-muted-foreground">{x.note}</span>}
-              <Button variant="ghost" size="sm" className="ml-auto" onClick={() => remove(x.date)}>
+            <li key={x.date} className="flex flex-wrap items-center gap-x-3 py-1.5 max-sm:pr-16 max-sm:relative">
+              <span className="w-full sm:w-48">{formatDate(x.date)}</span>
+              <span className={`whitespace-nowrap ${x.closed ? "text-destructive" : ""}`}>
+                {x.closed ? "zamknięte" : `${x.opens}–${x.closes}`}
+              </span>
+              {x.note && <span className="min-w-0 truncate text-xs text-muted-foreground">{x.note}</span>}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto max-sm:absolute max-sm:top-1/2 max-sm:right-0 max-sm:-translate-y-1/2"
+                onClick={() => remove(x.date)}
+              >
                 Usuń
               </Button>
             </li>
