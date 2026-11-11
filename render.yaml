@@ -1,0 +1,23 @@
+# Render Blueprint: free Horarium preview with made-up demo data (no real patients).
+# The database is a free Neon Postgres; paste its connection string as DATABASE_URL when Render asks.
+services:
+  - type: web
+    name: horarium-preview
+    runtime: docker
+    plan: free
+    region: frankfurt
+    branch: preview
+    dockerfilePath: ./apps/horarium/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - apps/horarium/**
+        - packages/dentaplus-ui/**
+        - pnpm-lock.yaml
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: CLINIC_PASSWORD
+        sync: false

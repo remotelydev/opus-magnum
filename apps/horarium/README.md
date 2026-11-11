@@ -57,12 +57,16 @@ pnpm --filter horarium seed:demo
 
 ## Preview (demo data only)
 
-`Dockerfile` builds the API and the UI into one image, and `preview/start.sh` migrates, fills an empty database with made-up demo data and starts the server. It is meant for a hosted preview of every branch or pull request (config for Railway in `railway.json`), never for the clinic: the preview gets its own empty database and real patient data never leaves the mini-PC.
+`Dockerfile` builds the API and the UI into one image. `preview/start.sh` migrates, fills an empty database with made-up demo data and starts the server. A preview always gets its own database and never touches the clinic's: real patient data stays on the clinic server.
 
-Set `CLINIC_PASSWORD` on the preview so the demo logins `recepcja` and `admin` do not use the public default password.
+Always set `CLINIC_PASSWORD`, so the demo logins `recepcja` and `admin` do not use the public default password.
+
+- **Render (free)**: `render.yaml` at the repo root deploys the `preview` branch on every push. The database is a free Neon Postgres (its connection string goes into `DATABASE_URL`). The free plan sleeps after 15 minutes idle, so the first visit takes about a minute.
+- **Tunnel from a laptop (free)**: `preview/tunnel.sh` runs the current checkout with its own throwaway database in Docker and shares it at a `…trycloudflare.com` address while the script runs.
+- **Railway (paid)**: `railway.json`, with a separate preview for every pull request.
 
 ```bash
-docker build -f apps/horarium/Dockerfile -t horarium-preview .
+CLINIC_PASSWORD='your-own-password' apps/horarium/preview/tunnel.sh
 ```
 
 ## Tests

@@ -1,0 +1,25 @@
+# Local preview with demo data, for sharing through a tunnel (see preview/tunnel.sh).
+# Its own throwaway database: never point this at the clinic database.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: horarium
+      POSTGRES_PASSWORD: horarium
+      POSTGRES_DB: horarium_preview
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "horarium"]
+      interval: 2s
+      retries: 30
+  app:
+    build:
+      context: ../../..
+      dockerfile: apps/horarium/Dockerfile
+    environment:
+      DATABASE_URL: postgres://horarium:horarium@db:5432/horarium_preview
+      CLINIC_PASSWORD: ${CLINIC_PASSWORD:?set CLINIC_PASSWORD before starting the preview}
+    ports:
+      - "127.0.0.1:8791:8790"
+    depends_on:
+      db:
+        condition: service_healthy
