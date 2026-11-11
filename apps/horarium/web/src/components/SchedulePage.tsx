@@ -34,11 +34,11 @@ export function SchedulePage({ initialStaffId }: { initialStaffId?: number | nul
   const member = staff.find((s) => s.id === staffId) ?? null;
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto p-4">
+    <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-4">
       <div className="mx-auto max-w-5xl space-y-4">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-lg font-semibold">Grafik pracy</h1>
-          <div className="w-72">
+          <div className="w-full sm:w-72">
             <Select
               className="h-8"
               value={staffId ?? ""}
@@ -167,15 +167,16 @@ function PatternEditor({ member, sites, onGenerated }: { member: Staff; sites: S
           const weekday = i + 1;
           const ranges = days.map((d, index) => ({ d, index })).filter(({ d }) => d.weekday === weekday);
           return (
-            <div key={name} className="flex items-start gap-3 px-4 py-2 text-sm">
-              <div className="w-28 pt-1.5 capitalize">{name}</div>
-              <div className="flex flex-1 flex-col gap-1.5">
-                {!ranges.length && <span className="pt-1.5 text-xs text-muted-foreground">wolne</span>}
+            // Phones: the day and "+ godziny" on one line, its hours underneath at full width.
+            <div key={name} className="grid grid-cols-[1fr_auto] items-start gap-x-3 gap-y-1.5 px-3 py-2 text-sm sm:flex sm:px-4">
+              <div className="pt-1.5 capitalize sm:w-28">{name}</div>
+              <div className="col-span-2 flex flex-col gap-1.5 max-sm:order-last sm:flex-1">
+                {!ranges.length && <span className="text-xs text-muted-foreground sm:pt-1.5">wolne</span>}
                 {ranges.map(({ d, index }) => (
                   <div key={index} className="flex flex-wrap items-center gap-2">
                     {sites.length > 1 ? (
                       <Select
-                        className="h-8 w-36"
+                        className="h-8 w-full sm:w-36"
                         value={d.siteId}
                         onChange={(e) => update(index, { siteId: e.target.value })}
                         aria-label={`${name}: placówka`}
@@ -187,7 +188,7 @@ function PatternEditor({ member, sites, onGenerated }: { member: Staff; sites: S
                         ))}
                       </Select>
                     ) : (
-                      <span className="w-36 text-muted-foreground">{siteName(d.siteId)}</span>
+                      <span className="text-muted-foreground max-sm:w-full sm:w-36">{siteName(d.siteId)}</span>
                     )}
                     <TimeInput
                       value={d.starts}
@@ -213,11 +214,11 @@ function PatternEditor({ member, sites, onGenerated }: { member: Staff; sites: S
           );
         })}
       </div>
-      <div className="flex flex-wrap items-end gap-3 border-t border-border px-4 py-3">
+      <div className="flex flex-wrap items-end gap-3 border-t border-border px-3 py-3 sm:px-4">
         <Button size="sm" variant="outline" onClick={save} disabled={busy || !dirty}>
           Zapisz tydzień
         </Button>
-        <div className="ml-auto flex flex-wrap items-end gap-2">
+        <div className="flex flex-wrap items-end gap-2 sm:ml-auto">
           <div className="space-y-1">
             <Label htmlFor="gen-from">Ułóż od</Label>
             <DateInput id="gen-from" value={from} onChange={(e) => setFrom(e.target.value)} />
@@ -333,15 +334,18 @@ function WeekView({
           const dayEnd = fromClinicTime(addDays(date, 1), 0).getTime();
           const items = blocks.filter((b) => new Date(b.startsAt).getTime() < dayEnd && new Date(b.endsAt).getTime() > dayStart);
           return (
-            <div key={date} className={`min-h-28 p-2 ${date === today ? "bg-primary-soft/40" : ""}`}>
-              <div className="mb-1.5 text-xs text-muted-foreground">
+            <div
+              key={date}
+              className={`p-2 max-sm:flex max-sm:gap-3 sm:min-h-28 ${date === today ? "bg-primary-soft/40" : ""}`}
+            >
+              <div className="mb-1.5 text-xs text-muted-foreground max-sm:w-20 max-sm:shrink-0 max-sm:pt-1">
                 <span className="capitalize">{WEEKDAY_NAMES[i].slice(0, 3)}</span> {fmt(date)}
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 max-sm:flex-1">
                 {items.map((b) => (
                   <div
                     key={b.id}
-                    className={`group relative rounded px-1.5 py-1 text-[11px] leading-tight ${
+                    className={`group relative rounded px-1.5 py-1 text-[11px] leading-tight pointer-coarse:pr-9 ${
                       b.kind === "absence"
                         ? "bg-[repeating-linear-gradient(45deg,transparent,transparent_4px,var(--dp-muted)_4px,var(--dp-muted)_8px)] text-muted-foreground"
                         : "bg-calendar-on text-foreground"
@@ -360,7 +364,8 @@ function WeekView({
                     <button
                       type="button"
                       onClick={() => remove(b)}
-                      className="absolute top-0.5 right-1 hidden text-muted-foreground group-hover:block hover:text-destructive"
+                      // Touch screens have no hover, so the delete button is always shown there.
+                      className="absolute top-0.5 right-1 hidden text-muted-foreground group-hover:block hover:text-destructive pointer-coarse:top-1/2 pointer-coarse:right-0 pointer-coarse:flex pointer-coarse:size-9 pointer-coarse:-translate-y-1/2 pointer-coarse:items-center pointer-coarse:justify-center"
                       aria-label="Usuń"
                     >
                       ✕
@@ -373,8 +378,8 @@ function WeekView({
           );
         })}
       </div>
-      <div className="flex flex-wrap items-end gap-2 border-t border-border px-4 py-3">
-        <span className="pb-1.5 text-sm font-medium">Nieobecność</span>
+      <div className="flex flex-wrap items-end gap-2 border-t border-border px-3 py-3 sm:px-4">
+        <span className="pb-1.5 text-sm font-medium max-sm:w-full">Nieobecność</span>
         <div className="space-y-1">
           <Label htmlFor="abs-from">od</Label>
           <DateInput id="abs-from" value={absenceFrom} onChange={(e) => setAbsenceFrom(e.target.value)} />

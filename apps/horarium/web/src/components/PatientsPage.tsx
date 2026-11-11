@@ -65,7 +65,7 @@ export function PatientsPage({ sites, staff, canEdit, canSeeHistory, onOpenDay }
 
   if (selected !== null) {
     return (
-      <main className="min-h-0 flex-1 overflow-auto p-4">
+      <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-4">
         <div className="mx-auto mb-4 max-w-4xl">
           <Button size="sm" variant="outline" onClick={backToList}>
             ← Lista pacjentów
@@ -85,7 +85,7 @@ export function PatientsPage({ sites, staff, canEdit, canSeeHistory, onOpenDay }
             onChanged={() => setReloadKey((k) => k + 1)}
           />
         )}
-      </main>
+      </div>
     );
   }
 
@@ -95,10 +95,10 @@ export function PatientsPage({ sites, staff, canEdit, canSeeHistory, onOpenDay }
   const to = Math.min(page * PAGE_SIZE, total);
 
   return (
-    <main className="min-h-0 flex-1 overflow-auto p-4">
+    <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-4">
       <div className="mx-auto max-w-5xl space-y-4">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-64 flex-1 space-y-1">
+          <div className="min-w-0 flex-1 basis-64 space-y-1">
             <Label htmlFor="patient-search">Szukaj pacjenta</Label>
             <Input
               id="patient-search"
@@ -124,7 +124,7 @@ export function PatientsPage({ sites, staff, canEdit, canSeeHistory, onOpenDay }
             <thead className="bg-muted text-left text-xs text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 font-medium">Nazwisko i imię</th>
-                <th className="w-44 px-3 py-2 font-medium">Telefon</th>
+                <th className="w-36 px-3 py-2 font-medium sm:w-44">Telefon</th>
                 <th className="hidden w-40 px-3 py-2 font-medium sm:table-cell">Data urodzenia</th>
               </tr>
             </thead>
@@ -186,7 +186,7 @@ export function PatientsPage({ sites, staff, canEdit, canSeeHistory, onOpenDay }
           </div>
         </nav>
       </div>
-    </main>
+    </div>
   );
 }
 
@@ -252,10 +252,10 @@ function PatientCardView({
               onClick={() => onOpenDay(a.siteId, t.date)}
               title="Pokaż ten dzień w terminarzu"
             >
-              <span className="w-40 tabular-nums">
+              <span className="tabular-nums sm:w-40">
                 {formatDate(t.date)}, {formatMinutes(t.minutes)}
               </span>
-              <span className="min-w-40 flex-1">{a.serviceName ?? a.title ?? "Wizyta"}</span>
+              <span className="min-w-0 flex-1 font-medium sm:min-w-40 sm:font-normal">{a.serviceName ?? a.title ?? "Wizyta"}</span>
               <span className="text-muted-foreground">
                 {doctor(a.staffId)} · {siteName(a.siteId)}
               </span>
@@ -381,7 +381,7 @@ function PatientForm({
   return (
     <form onSubmit={submit} className="mx-auto max-w-2xl space-y-4">
       <h1 className="text-lg font-semibold">{patient ? "Edycja danych pacjenta" : "Nowy pacjent"}</h1>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         {field("firstName", "Imię")}
         {field("lastName", "Nazwisko")}
         {field("phone", "Telefon", "tel")}

@@ -35,6 +35,13 @@ export function AppointmentPanel({ appointment: a, staff, canEdit, canSeeHistory
   const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
+    // Over the calendar on phones and tablets, so Escape closes it like a dialog.
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !(e.target instanceof HTMLInputElement) && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  useEffect(() => {
     if (a.patientId) api.patient(a.patientId).then(setPatient).catch(() => setPatient(null));
   }, [a.patientId]);
 
@@ -65,7 +72,11 @@ export function AppointmentPanel({ appointment: a, staff, canEdit, canSeeHistory
   const doctor = staff.find((s) => s.id === a.staffId)?.name ?? "";
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col gap-4 overflow-auto border-l border-border bg-surface p-4 text-sm" aria-label="Szczegóły wizyty">
+    // Wide screens: a panel beside the calendar. Phones and tablets: slides over it, full width on a phone.
+    <aside
+      className="fixed inset-0 z-40 flex flex-col gap-4 overflow-auto bg-surface p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-sm shadow-xl sm:left-auto sm:w-96 sm:border-l sm:border-border xl:static xl:z-auto xl:w-80 xl:shrink-0 xl:shadow-none"
+      aria-label="Szczegóły wizyty"
+    >
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-base font-medium">{a.patientName ?? a.title ?? "Blokada"}</h2>
@@ -77,7 +88,11 @@ export function AppointmentPanel({ appointment: a, staff, canEdit, canSeeHistory
             {a.source === "bot" ? " · umówione przez bota" : ""}
           </p>
         </div>
-        <button onClick={onClose} aria-label="Zamknij" className="text-muted-foreground hover:text-foreground">
+        <button
+          onClick={onClose}
+          aria-label="Zamknij"
+          className="-mt-1 -mr-2 flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
           ✕
         </button>
       </div>

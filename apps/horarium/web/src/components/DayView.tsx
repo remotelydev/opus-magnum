@@ -1,6 +1,6 @@
 import { STATUS_CLASSES } from "@opus-magnum/dentaplus-ui/components/status";
 import { calendar } from "@opus-magnum/dentaplus-ui/tokens";
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { api, type Appointment, type ScheduleBlock, type Service, type Staff } from "../lib/api.ts";
 import {
   DAY_END_MIN,
@@ -17,6 +17,11 @@ import { BookingDialog } from "./BookingDialog.tsx";
 
 const PX_PER_MIN = calendar.pxPerMinute;
 const REFRESH_MS = 30_000;
+/** Every column gets an equal share; the rows are at least 9rem (8rem on desktops) per doctor wide,
+ *  so two doctors fit a phone and about a dozen fit a 24-inch screen. Header and body use the same
+ *  rule, so the names always sit above their columns. */
+const COLUMN = "min-w-0 flex-1 basis-0";
+const ROW = "flex min-w-[calc(3.5rem+var(--cols)*9rem)] lg:min-w-[calc(3.5rem+var(--cols)*8rem)]";
 const HOURS = Array.from({ length: (DAY_END_MIN - DAY_START_MIN) / 60 }, (_, i) => DAY_START_MIN + i * 60);
 
 
@@ -28,11 +33,14 @@ interface Props {
   canEdit: boolean;
   /** Admins see each patient's change log in the visit panel. */
   canSeeHistory?: boolean;
+  /** Show only this person's column; null shows everyone at the site. */
+  focusStaff?: number | null;
+  onFocusStaff?: (id: number | null) => void;
 }
 
 type Booking = { staffId: number; startMin: number };
 
-export function DayView({ site, date, staff, services, canEdit, canSeeHistory = false }: Props) {
+export function DayView({ site, date, staff, services, canEdit, canSeeHistory = false, focusStaff = null, onFocusStaff }: Props) {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [schedules, setSchedules] = useState<ScheduleBlock[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +115,9 @@ export function DayView({ site, date, staff, services, canEdit, canSeeHistory = 
   };
 
   const selectedAppt = appointments.find((a) => a.id === selected) ?? null;
+  const columns = staff.some((s) => s.id === focusStaff) ? staff.filter((s) => s.id === focusStaff) : staff;
+  const visibleIds = new Set(columns.map((s) => s.id));
+  const visitCount = appointments.filter((a) => a.status !== "cancelled" && visibleIds.has(a.staffId)).length;
 
   if (!staff.length) {
     return <p className="p-6 text-sm text-muted-foreground">Brak lekarzy przypisanych do tej placówki.</p>;
@@ -115,13 +126,35 @@ export function DayView({ site, date, staff, services, canEdit, canSeeHistory = 
   return (
     <div className="flex min-h-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center gap-4 border-b border-border px-4 py-1 text-xs text-muted-foreground">
-          <span>{appointments.filter((a) => a.status !== "cancelled").length} wizyt</span>
-          <label className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border px-3 py-1 text-xs text-muted-foreground sm:px-4">
+          <span>{visitCount} wizyt</span>
+          <label className="flex items-center gap-1 pointer-coarse:py-1">
             <input type="checkbox" checked={showCancelled} onChange={(e) => setShowCancelled(e.target.checked)} />
             Pokaż odwołane
           </label>
-          {canEdit && <span>Kliknij wolne pole, żeby umówić. Przeciągnij wizytę, żeby ją przenieść.</span>}
+          {canEdit && (
+            <>
+              <span className="hidden pointer-fine:lg:inline">
+                Kliknij wolne pole, żeby umówić. Przeciągnij wizytę, żeby ją przenieść.
+              </span>
+              <span className="hidden pointer-coarse:sm:inline">Dotknij wolnego pola, żeby umówić.</span>
+            </>
+          )}
+          {onFocusStaff && staff.length > 1 && (
+            <select
+              value={columns.length === 1 ? columns[0]!.id : ""}
+              onChange={(e) => onFocusStaff(e.target.value ? Number(e.target.value) : null)}
+              className="ml-auto h-7 w-36 min-w-0 rounded-md sm:w-48 border border-input bg-surface px-2 text-xs text-foreground pointer-coarse:h-9"
+              aria-label="Pokaż kolumny"
+            >
+              <option value="">Wszyscy ({staff.length})</option>
+              {staff.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          )}
           {error && <span className="text-destructive">Brak połączenia: {error}</span>}
           {notice && (
             <button className="ml-auto text-foreground underline-offset-2 hover:underline" onClick={() => setNotice(null)}>
@@ -129,24 +162,29 @@ export function DayView({ site, date, staff, services, canEdit, canSeeHistory = 
             </button>
           )}
         </div>
-        <div className="min-h-0 flex-1 overflow-auto">
-          <div className="sticky top-0 z-20 flex border-b border-border bg-surface">
-            <div className="w-14 shrink-0" />
-            {staff.map((s) => (
-              <div key={s.id} className="min-w-40 flex-1 border-l border-border px-2 py-1.5 text-xs font-medium">
-                {s.name}
+        {/* Scrolls both ways: doctors' names stay on top and the hours stay on the left. On phones a
+            column snaps into place after a swipe, about two doctors per screen. */}
+        <div
+          className="min-h-0 flex-1 overflow-auto overscroll-contain max-sm:snap-x max-sm:snap-mandatory max-sm:scroll-pl-12"
+          style={{ "--cols": columns.length } as CSSProperties}
+        >
+          <div className={`${ROW} sticky top-0 z-20 border-b border-border bg-surface`}>
+            <div className="sticky left-0 z-10 w-12 shrink-0 bg-surface sm:w-14" />
+            {columns.map((s) => (
+              <div key={s.id} className={`${COLUMN} border-l border-border px-2 py-1.5 text-xs font-medium`}>
+                <span className="line-clamp-2">{s.name}</span>
               </div>
             ))}
           </div>
-          <div className="relative flex" style={{ height: (DAY_END_MIN - DAY_START_MIN) * PX_PER_MIN }}>
-            <div className="relative w-14 shrink-0 text-[11px] text-muted-foreground">
+          <div className={`${ROW} relative`} style={{ height: (DAY_END_MIN - DAY_START_MIN) * PX_PER_MIN + 8 }}>
+            <div className="sticky left-0 z-[15] w-12 shrink-0 bg-surface text-[11px] text-muted-foreground sm:w-14">
               {HOURS.map((h) => (
-                <div key={h} className="absolute right-2" style={{ top: (h - DAY_START_MIN) * PX_PER_MIN - 6 }}>
+                <div key={h} className="absolute right-1.5 sm:right-2" style={{ top: (h - DAY_START_MIN) * PX_PER_MIN + 2 }}>
                   {formatMinutes(h)}
                 </div>
               ))}
             </div>
-            {staff.map((s) => {
+            {columns.map((s) => {
               const col = byStaff.get(s.id)!;
               const placed = layoutColumn(
                 col.appts.map((a) => ({
@@ -158,7 +196,7 @@ export function DayView({ site, date, staff, services, canEdit, canSeeHistory = 
               return (
                 <div
                   key={s.id}
-                  className="relative min-w-40 flex-1 border-l border-border bg-calendar-off"
+                  className={`${COLUMN} relative mt-2 snap-start border-l border-border bg-calendar-off`}
                   onClick={(e) => {
                     if (!canEdit || e.target !== e.currentTarget) return;
                     setBooking({ staffId: s.id, startMin: minutesFromEvent(e) });
