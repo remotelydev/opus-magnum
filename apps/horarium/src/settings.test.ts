@@ -78,6 +78,12 @@ describe("settings API", { skip: TEST_DATABASE_URL ? false : "TEST_DATABASE_URL 
     assert.equal(anna.email, null);
     assert.equal(anna.sortOrder, 2);
     assert.deepEqual(anna.sites, ["poddebice", "turek"]);
+    // A new person gets a palette colour; admins can change it, and only to a hex colour.
+    assert.match(anna.color, /^#[0-9a-f]{6}$/);
+    assert.equal((await call("PATCH", `/api/staff/${id}`, "admin", { color: "#AABBCC" })).status, 200);
+    assert.equal((await call("PATCH", `/api/staff/${id}`, "admin", { color: "red" })).status, 400);
+    const recoloured = (await call("GET", "/api/staff", "lekarz")).body.find((s: { id: number }) => s.id === id);
+    assert.equal(recoloured.color, "#aabbcc");
     assert.equal((await call("PATCH", "/api/staff/99999", "admin", { active: false })).status, 404);
   });
 

@@ -39,7 +39,14 @@ const STAFF_COLUMNS = {
   email: "email",
   active: "active",
   sortOrder: "sort_order",
+  color: "color",
 } as const;
+
+/** Column colours for new people, in order; the same list migration 003 gave existing staff. */
+export const STAFF_PALETTE = [
+  "#5b9bd5", "#5fc4ad", "#3a9ea5", "#b18cd9", "#7f95e0", "#5fb88a",
+  "#e89ab5", "#c08a3e", "#e57373", "#e3b341", "#8bc34a", "#9c6b8e",
+] as const;
 type StaffField = keyof typeof STAFF_COLUMNS;
 type StaffBody = Partial<{
   name: string;
@@ -49,6 +56,7 @@ type StaffBody = Partial<{
   email: string | null;
   active: boolean;
   sortOrder: number;
+  color: string;
   sites: string[];
 }>;
 
@@ -60,6 +68,7 @@ const staffProps = {
   email: { type: ["string", "null"], maxLength: 120 },
   active: { type: "boolean" },
   sortOrder: { type: "integer" },
+  color: { type: "string", pattern: "^#[0-9a-fA-F]{6}$" },
   sites: { type: "array", items: { type: "string" }, minItems: 1, uniqueItems: true },
 } as const;
 
@@ -72,11 +81,12 @@ function cleanStaff(body: StaffBody): StaffBody {
     out.name = out.name.trim();
     if (!out.name) throw badRequest("Podaj imię i nazwisko.");
   }
+  if (typeof out.color === "string") out.color = out.color.toLowerCase();
   return out;
 }
 
 const STAFF_SELECT = `
-  SELECT st.id, st.name, st.kind, st.title, st.phone, st.email, st.active, st.sort_order,
+  SELECT st.id, st.name, st.kind, st.title, st.phone, st.email, st.active, st.sort_order, st.color,
          COALESCE(array_agg(ss.site_id ORDER BY ss.site_id) FILTER (WHERE ss.site_id IS NOT NULL), '{}') AS sites
     FROM staff st LEFT JOIN staff_sites ss ON ss.staff_id = st.id`;
 
@@ -90,6 +100,7 @@ function staffRow(r: Record<string, unknown>) {
     email: r.email ?? null,
     active: r.active,
     sortOrder: r.sort_order,
+    color: r.color ?? null,
     sites: r.sites,
   };
 }
@@ -156,6 +167,10 @@ export function registerSettings(app: FastifyInstance, db: Db, guards: Guards, p
     async (req, reply) => {
       const body = cleanStaff(req.body);
       const id = await inTransaction(db, async (client) => {
+        if (!body.color) {
+          const { rows: count } = await client.query<{ n: number }>("SELECT count(*)::int AS n FROM staff");
+          body.color = STAFF_PALETTE[count[0].n % STAFF_PALETTE.length];
+        }
         const keys = (Object.keys(body) as StaffField[]).filter((k) => k in STAFF_COLUMNS);
         const { rows } = await client.query<{ id: number }>(
           `INSERT INTO staff (${keys.map((k) => STAFF_COLUMNS[k]).join(", ")})

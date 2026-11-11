@@ -3,6 +3,10 @@ import { Input, Label, Select } from "@opus-magnum/dentaplus-ui/components/field
 import { Modal } from "@opus-magnum/dentaplus-ui/components/modal";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { api, type Site, type Staff, type StaffInput } from "../lib/api.ts";
+import { staffColor } from "../lib/columns.ts";
+
+/** Quick picks for a column colour; any other colour can be chosen in the picker next to them. */
+const SWATCHES = ["#5b9bd5", "#5fc4ad", "#3a9ea5", "#b18cd9", "#7f95e0", "#5fb88a", "#e89ab5", "#c08a3e", "#e57373", "#e3b341", "#8bc34a", "#9c6b8e"];
 
 const EMPTY: StaffInput = {
   name: "",
@@ -12,6 +16,7 @@ const EMPTY: StaffInput = {
   email: null,
   active: true,
   sortOrder: 0,
+  color: null,
   sites: [],
 };
 
@@ -99,7 +104,10 @@ export function StaffPage({ onOpenSchedule }: { onOpenSchedule: (staffId: number
               {list.map((s) => (
                 <tr key={s.id} className={`border-b border-border last:border-0 ${s.active ? "" : "opacity-50"}`}>
                   <td className="px-3 py-2">
-                    <div className="font-medium">{s.name}</div>
+                    <div className="flex items-center gap-2 font-medium">
+                      <span className="size-3 shrink-0 rounded-sm" style={{ background: staffColor(s) }} aria-hidden="true" />
+                      {s.name}
+                    </div>
                     <div className="text-xs text-muted-foreground">
                       {s.kind === "calendar" ? "kalendarz (nie osoba)" : s.title || "—"}
                     </div>
@@ -185,6 +193,7 @@ function StaffForm({
       active: form.active,
       sortOrder: form.sortOrder,
       sites: form.sites,
+      ...(form.color ? { color: form.color } : {}),
     };
     setBusy(true);
     setError(null);
@@ -242,6 +251,31 @@ function StaffForm({
                 {s.name}
               </label>
             ))}
+          </div>
+        </fieldset>
+        <fieldset className="space-y-1">
+          <legend className="text-xs font-medium text-muted-foreground">Kolor w terminarzu</legend>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {SWATCHES.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => set("color", c)}
+                aria-label={`Kolor ${c}`}
+                aria-pressed={form.color === c}
+                className={`size-6 rounded-md pointer-coarse:size-8 ${form.color === c ? "ring-2 ring-ring ring-offset-2 ring-offset-surface" : ""}`}
+                style={{ background: c }}
+              />
+            ))}
+            <input
+              type="color"
+              value={form.color ?? (member ? staffColor(member) : SWATCHES[0])}
+              onChange={(e) => set("color", e.target.value)}
+              aria-label="Inny kolor"
+              title="Inny kolor"
+              className="h-6 w-8 cursor-pointer rounded border border-input bg-surface pointer-coarse:h-8"
+            />
+            {!member && !form.color && <span className="text-xs text-muted-foreground">bez wyboru: kolejny z palety</span>}
           </div>
         </fieldset>
         <div className="flex flex-wrap items-center gap-4 text-sm">

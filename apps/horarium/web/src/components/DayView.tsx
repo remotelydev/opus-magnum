@@ -1,12 +1,12 @@
 import { STATUS_CLASSES } from "@opus-magnum/dentaplus-ui/components/status";
 import { calendar } from "@opus-magnum/dentaplus-ui/tokens";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
+import { useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { api, type Appointment, type ScheduleBlock, type Service, type Staff } from "../lib/api.ts";
+import { staffColor } from "../lib/columns.ts";
 import {
   DAY_END_MIN,
   DAY_START_MIN,
   SLOT_MIN,
-  addDays,
   formatMinutes,
   fromClinicTime,
   layoutColumn,
@@ -16,7 +16,6 @@ import { AppointmentPanel } from "./AppointmentPanel.tsx";
 import { BookingDialog } from "./BookingDialog.tsx";
 
 const PX_PER_MIN = calendar.pxPerMinute;
-const REFRESH_MS = 30_000;
 /** Every column gets an equal share; the rows are at least 9rem (8rem on desktops) per doctor wide,
  *  so two doctors fit a phone and about a dozen fit a 24-inch screen. Header and body use the same
  *  rule, so the names always sit above their columns. */
@@ -28,52 +27,41 @@ const HOURS = Array.from({ length: (DAY_END_MIN - DAY_START_MIN) / 60 }, (_, i) 
 interface Props {
   site: string;
   date: string;
+  /** Everyone at the site: the booking and visit dialogs can pick any of them. */
   staff: Staff[];
+  /** The people ticked in the staff panel, one column each. */
+  columns: Staff[];
+  /** The day's data, loaded once for the calendar and the staff panel (see useDayData). */
+  appointments: Appointment[];
+  schedules: ScheduleBlock[];
+  error: string | null;
+  reload: () => void;
   services: Service[];
   canEdit: boolean;
   /** Admins see each patient's change log in the visit panel. */
   canSeeHistory?: boolean;
-  /** Show only this person's column; null shows everyone at the site. */
-  focusStaff?: number | null;
-  onFocusStaff?: (id: number | null) => void;
 }
 
 type Booking = { staffId: number; startMin: number };
 
-export function DayView({ site, date, staff, services, canEdit, canSeeHistory = false, focusStaff = null, onFocusStaff }: Props) {
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [schedules, setSchedules] = useState<ScheduleBlock[]>([]);
-  const [error, setError] = useState<string | null>(null);
+export function DayView({
+  site,
+  date,
+  staff,
+  columns,
+  appointments,
+  schedules,
+  error,
+  reload: load,
+  services,
+  canEdit,
+  canSeeHistory = false,
+}: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [booking, setBooking] = useState<Booking | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [showCancelled, setShowCancelled] = useState(true);
   const dragOffsetMin = useRef(0);
-
-  const range = useMemo(
-    () => ({ from: fromClinicTime(date, 0).toISOString(), to: fromClinicTime(addDays(date, 1), 0).toISOString() }),
-    [date],
-  );
-
-  const load = useCallback(async () => {
-    try {
-      const [a, s] = await Promise.all([
-        api.appointments(site, range.from, range.to),
-        api.schedules(site, range.from, range.to),
-      ]);
-      setAppointments(a);
-      setSchedules(s);
-      setError(null);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }, [site, range]);
-
-  useEffect(() => {
-    load();
-    const timer = setInterval(load, REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [load]);
 
   const byStaff = useMemo(() => {
     const map = new Map<number, { appts: Appointment[]; blocks: ScheduleBlock[] }>();
@@ -115,16 +103,16 @@ export function DayView({ site, date, staff, services, canEdit, canSeeHistory = 
   };
 
   const selectedAppt = appointments.find((a) => a.id === selected) ?? null;
-  const columns = staff.some((s) => s.id === focusStaff) ? staff.filter((s) => s.id === focusStaff) : staff;
   const visibleIds = new Set(columns.map((s) => s.id));
   const visitCount = appointments.filter((a) => a.status !== "cancelled" && visibleIds.has(a.staffId)).length;
 
   if (!staff.length) {
     return <p className="p-6 text-sm text-muted-foreground">Brak lekarzy przypisanych do tej placówki.</p>;
   }
+  const hiddenVisits = appointments.filter((a) => a.status !== "cancelled" && !visibleIds.has(a.staffId)).length;
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 min-w-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border px-3 py-1 text-xs text-muted-foreground sm:px-4">
           <span>{visitCount} wizyt</span>
@@ -140,20 +128,13 @@ export function DayView({ site, date, staff, services, canEdit, canSeeHistory = 
               <span className="hidden pointer-coarse:sm:inline">Dotknij wolnego pola, żeby umówić.</span>
             </>
           )}
-          {onFocusStaff && staff.length > 1 && (
-            <select
-              value={columns.length === 1 ? columns[0]!.id : ""}
-              onChange={(e) => onFocusStaff(e.target.value ? Number(e.target.value) : null)}
-              className="ml-auto h-7 w-36 min-w-0 rounded-md sm:w-48 border border-input bg-surface px-2 text-xs text-foreground pointer-coarse:h-9"
-              aria-label="Pokaż kolumny"
-            >
-              <option value="">Wszyscy ({staff.length})</option>
-              {staff.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+          <span>
+            {columns.length} z {staff.length} {staff.length === 1 ? "osoby" : "osób"}
+          </span>
+          {hiddenVisits > 0 && (
+            <span className="text-foreground" title="Wizyty osób, które nie są zaznaczone w panelu Pracownicy">
+              {hiddenVisits} wizyt u niezaznaczonych osób
+            </span>
           )}
           {error && <span className="text-destructive">Brak połączenia: {error}</span>}
           {notice && (
@@ -162,16 +143,26 @@ export function DayView({ site, date, staff, services, canEdit, canSeeHistory = 
             </button>
           )}
         </div>
+        {!columns.length && (
+          <p className="p-6 text-sm text-muted-foreground">
+            Nikt nie jest zaznaczony: tego dnia nikt nie ma grafiku albo odznaczono wszystkich. Zaznacz osoby
+            w panelu „Pracownicy”, żeby zobaczyć ich kolumny.
+          </p>
+        )}
         {/* Scrolls both ways: doctors' names stay on top and the hours stay on the left. On phones a
             column snaps into place after a swipe, about two doctors per screen. */}
         <div
-          className="min-h-0 flex-1 overflow-auto overscroll-contain max-sm:snap-x max-sm:snap-mandatory max-sm:scroll-pl-12"
+          className={`min-h-0 flex-1 overflow-auto overscroll-contain max-sm:snap-x max-sm:snap-mandatory max-sm:scroll-pl-12 ${columns.length ? "" : "hidden"}`}
           style={{ "--cols": columns.length } as CSSProperties}
         >
           <div className={`${ROW} sticky top-0 z-20 border-b border-border bg-surface`}>
             <div className="sticky left-0 z-10 w-12 shrink-0 bg-surface sm:w-14" />
             {columns.map((s) => (
-              <div key={s.id} className={`${COLUMN} border-l border-border px-2 py-1.5 text-xs font-medium`}>
+              <div
+                key={s.id}
+                className={`${COLUMN} border-t-4 border-l border-l-border px-2 py-1 text-xs font-medium`}
+                style={{ borderTopColor: staffColor(s) }}
+              >
                 <span className="line-clamp-2">{s.name}</span>
               </div>
             ))}
