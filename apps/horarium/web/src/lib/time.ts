@@ -52,6 +52,12 @@ export function addDays(date: string, days: number): string {
   return t.toISOString().slice(0, 10);
 }
 
+/** Start of the calendar slot at `offsetPx` from the top of a column: what a click there books. */
+export function slotAt(offsetPx: number, pxPerMinute: number): number {
+  const raw = DAY_START_MIN + offsetPx / pxPerMinute;
+  return Math.min(Math.max(Math.floor(raw / SLOT_MIN) * SLOT_MIN, DAY_START_MIN), DAY_END_MIN - SLOT_MIN);
+}
+
 export function formatMinutes(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;

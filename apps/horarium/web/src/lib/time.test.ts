@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { addDays, fromClinicTime, layoutColumn, parseHhmm, toClinicTime, todayInClinic } from "./time.ts";
+import {
+  DAY_END_MIN,
+  DAY_START_MIN,
+  addDays,
+  fromClinicTime,
+  layoutColumn,
+  parseHhmm,
+  slotAt,
+  toClinicTime,
+  todayInClinic,
+} from "./time.ts";
 
 test("clinic time round-trips in winter and summer", () => {
   assert.equal(fromClinicTime("2026-12-01", 8 * 60).toISOString(), "2026-12-01T07:00:00.000Z");
@@ -34,4 +44,14 @@ test("layoutColumn splits only overlapping items into lanes", () => {
   assert.deepEqual([out.c.lane, out.c.lanes], [0, 1]);
   assert.equal(out.a.top, 60);
   assert.equal(out.a.height, 60);
+});
+
+test("slotAt: the hover label and the click pick the same slot start", () => {
+  const px = 1.6;
+  assert.equal(slotAt(0, px), DAY_START_MIN);
+  // 14 minutes in is still the first quarter; 15 minutes starts the next one.
+  assert.equal(slotAt(14.9 * px, px), DAY_START_MIN);
+  assert.equal(slotAt(15 * px, px), DAY_START_MIN + 15);
+  assert.equal(slotAt(-10, px), DAY_START_MIN);
+  assert.equal(slotAt(1e6, px), DAY_END_MIN - 15);
 });

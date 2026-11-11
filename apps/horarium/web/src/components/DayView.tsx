@@ -8,6 +8,7 @@ import {
   DAY_START_MIN,
   SLOT_MIN,
   formatMinutes,
+  slotAt,
   fromClinicTime,
   layoutColumn,
   toClinicTime,
@@ -40,6 +41,8 @@ interface Props {
   canEdit: boolean;
   /** Admins see each patient's change log in the visit panel. */
   canSeeHistory?: boolean;
+  /** "Pokaż odwołane" in the header: cancelled and no-show visits stay on the calendar. */
+  showCancelled?: boolean;
 }
 
 type Booking = { staffId: number; startMin: number };
@@ -56,11 +59,14 @@ export function DayView({
   services,
   canEdit,
   canSeeHistory = false,
+  showCancelled = true,
 }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [booking, setBooking] = useState<Booking | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
-  const [showCancelled, setShowCancelled] = useState(true);
+  /** The free slot under the mouse, as in Versum: its start time shows in the slot's top-left corner.
+   *  Mouse only: touch screens have no hover and keep the plain tap-to-book. */
+  const [hover, setHover] = useState<Booking | null>(null);
   const dragOffsetMin = useRef(0);
 
   const byStaff = useMemo(() => {
@@ -74,11 +80,9 @@ export function DayView({
     return map;
   }, [staff, appointments, schedules, showCancelled]);
 
-  const minutesFromEvent = (e: { clientY: number; currentTarget: HTMLElement }) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const raw = DAY_START_MIN + (e.clientY - rect.top) / PX_PER_MIN;
-    return Math.min(Math.max(Math.floor(raw / SLOT_MIN) * SLOT_MIN, DAY_START_MIN), DAY_END_MIN - SLOT_MIN);
-  };
+  // The click and the hover label use the same maths, so the time shown is the slot that opens.
+  const minutesFromEvent = (e: { clientY: number; currentTarget: HTMLElement }) =>
+    slotAt(e.clientY - e.currentTarget.getBoundingClientRect().top, PX_PER_MIN);
 
   const onDrop = async (e: DragEvent<HTMLDivElement>, staffId: number) => {
     e.preventDefault();
@@ -103,46 +107,26 @@ export function DayView({
   };
 
   const selectedAppt = appointments.find((a) => a.id === selected) ?? null;
-  const visibleIds = new Set(columns.map((s) => s.id));
-  const visitCount = appointments.filter((a) => a.status !== "cancelled" && visibleIds.has(a.staffId)).length;
 
   if (!staff.length) {
     return <p className="p-6 text-sm text-muted-foreground">Brak lekarzy przypisanych do tej placówki.</p>;
   }
-  const hiddenVisits = appointments.filter((a) => a.status !== "cancelled" && !visibleIds.has(a.staffId)).length;
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border px-3 py-1 text-xs text-muted-foreground sm:px-4">
-          <span>{visitCount} wizyt</span>
-          <label className="flex items-center gap-1 pointer-coarse:py-1">
-            <input type="checkbox" checked={showCancelled} onChange={(e) => setShowCancelled(e.target.checked)} />
-            Pokaż odwołane
-          </label>
-          {canEdit && (
-            <>
-              <span className="hidden pointer-fine:lg:inline">
-                Kliknij wolne pole, żeby umówić. Przeciągnij wizytę, żeby ją przenieść.
-              </span>
-              <span className="hidden pointer-coarse:sm:inline">Dotknij wolnego pola, żeby umówić.</span>
-            </>
-          )}
-          <span>
-            {columns.length} z {staff.length} {staff.length === 1 ? "osoby" : "osób"}
-          </span>
-          {hiddenVisits > 0 && (
-            <span className="text-foreground" title="Wizyty osób, które nie są zaznaczone w panelu Pracownicy">
-              {hiddenVisits} wizyt u niezaznaczonych osób
-            </span>
-          )}
-          {error && <span className="text-destructive">Brak połączenia: {error}</span>}
-          {notice && (
-            <button className="ml-auto text-foreground underline-offset-2 hover:underline" onClick={() => setNotice(null)}>
-              {notice} ✕
-            </button>
-          )}
-        </div>
+        {/* The visit count and "Pokaż odwołane" live in the header; this bar only shows up for a
+            lost connection or the result of the last action. */}
+        {(error || notice) && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border px-3 py-1 text-xs text-muted-foreground sm:px-4">
+            {error && <span className="text-destructive">Brak połączenia: {error}</span>}
+            {notice && (
+              <button className="ml-auto text-foreground underline-offset-2 hover:underline" onClick={() => setNotice(null)}>
+                {notice} ✕
+              </button>
+            )}
+          </div>
+        )}
         {!columns.length && (
           <p className="p-6 text-sm text-muted-foreground">
             Nikt nie jest zaznaczony: tego dnia nikt nie ma grafiku albo odznaczono wszystkich. Zaznacz osoby
@@ -192,6 +176,15 @@ export function DayView({
                     if (!canEdit || e.target !== e.currentTarget) return;
                     setBooking({ staffId: s.id, startMin: minutesFromEvent(e) });
                   }}
+                  onPointerMove={(e) => {
+                    if (!canEdit || e.pointerType !== "mouse" || e.target !== e.currentTarget || e.buttons) {
+                      if (hover) setHover(null);
+                      return;
+                    }
+                    const startMin = minutesFromEvent(e);
+                    if (hover?.staffId !== s.id || hover.startMin !== startMin) setHover({ staffId: s.id, startMin });
+                  }}
+                  onPointerLeave={() => setHover(null)}
                   onDragOver={(e) => canEdit && e.preventDefault()}
                   onDrop={(e) => onDrop(e, s.id)}
                   data-testid={`column-${s.id}`}
@@ -222,6 +215,15 @@ export function DayView({
                       style={{ top: (h - DAY_START_MIN) * PX_PER_MIN }}
                     />
                   ))}
+                  {hover?.staffId === s.id && (
+                    <div
+                      className="pointer-events-none absolute inset-x-0 rounded-sm bg-primary/10 px-1 text-[11px] font-medium leading-4 text-foreground ring-1 ring-inset ring-primary/40"
+                      style={{ top: (hover.startMin - DAY_START_MIN) * PX_PER_MIN, height: SLOT_MIN * PX_PER_MIN }}
+                      data-testid="hover-slot"
+                    >
+                      {formatMinutes(hover.startMin)}
+                    </div>
+                  )}
                   {placed.map(({ item: { a, startMin, endMin }, top, height, lane, lanes }) => (
                     <button
                       key={a.id}
