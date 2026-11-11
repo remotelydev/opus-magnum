@@ -1,37 +1,23 @@
 import { Button } from "@opus-magnum/dentaplus-ui/components/button";
-import { ComputerDesktopIcon, MoonIcon, SunIcon } from "@heroicons/react/20/solid";
+import { MoonIcon, SunIcon } from "@heroicons/react/20/solid";
 import { useState } from "react";
-import { applyTheme, nextTheme, readTheme, saveTheme, type ThemeChoice } from "../lib/theme.ts";
+import { applyTheme, currentTheme, oppositeTheme, saveTheme, type Theme } from "../lib/theme.ts";
 
-const LABELS: Record<ThemeChoice, string> = {
-  system: "Motyw: jak w systemie",
-  light: "Motyw: jasny",
-  dark: "Motyw: ciemny",
-};
-
-const ICONS = { system: ComputerDesktopIcon, light: SunIcon, dark: MoonIcon } as const;
-
-/** One button that cycles system → light → dark. The choice is kept in localStorage. */
+/** Shows the current theme's icon; a click switches to the other theme and remembers it. */
 export function ThemeToggle({ className }: { className?: string }) {
-  const [theme, setTheme] = useState<ThemeChoice>(readTheme);
-  const Icon = ICONS[theme];
-  const next = nextTheme(theme);
+  const [theme, setTheme] = useState<Theme>(currentTheme);
+  const Icon = theme === "dark" ? MoonIcon : SunIcon;
+  const label = theme === "dark" ? "Włącz jasny motyw" : "Włącz ciemny motyw";
 
-  const change = () => {
+  const toggle = () => {
+    const next = oppositeTheme(theme);
     setTheme(next);
     saveTheme(next);
     applyTheme(next);
   };
 
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className={className}
-      onClick={change}
-      aria-label={`${LABELS[theme]}. Kliknij: ${LABELS[next].replace("Motyw: ", "")}`}
-      title={`${LABELS[theme]} (kliknij, aby zmienić)`}
-    >
+    <Button variant="ghost" size="icon" className={className} onClick={toggle} aria-label={label} title={label}>
       <Icon />
     </Button>
   );

@@ -1,37 +1,38 @@
-/** Colour theme choice. "system" follows the OS; "light"/"dark" force it with a class on <html>. */
-export type ThemeChoice = "system" | "light" | "dark";
+/** Colour theme. Until the user picks one, the app starts in whatever the OS prefers. */
+export type Theme = "light" | "dark";
 
 export const THEME_KEY = "horarium.theme";
 
-const ORDER: ThemeChoice[] = ["system", "light", "dark"];
-
-export function parseTheme(value: string | null | undefined): ThemeChoice {
-  return value === "light" || value === "dark" ? value : "system";
+export function parseTheme(value: string | null | undefined): Theme | null {
+  return value === "light" || value === "dark" ? value : null;
 }
 
-export function nextTheme(current: ThemeChoice): ThemeChoice {
-  return ORDER[(ORDER.indexOf(current) + 1) % ORDER.length]!;
+export function oppositeTheme(theme: Theme): Theme {
+  return theme === "dark" ? "light" : "dark";
 }
 
-export function readTheme(): ThemeChoice {
+/** The saved choice, else the OS preference. */
+export function currentTheme(): Theme {
+  let saved: Theme | null = null;
   try {
-    return parseTheme(localStorage.getItem(THEME_KEY));
+    saved = parseTheme(localStorage.getItem(THEME_KEY));
   } catch {
-    return "system";
+    /* storage blocked */
   }
+  if (saved) return saved;
+  return typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-export function saveTheme(choice: ThemeChoice): void {
+export function saveTheme(theme: Theme): void {
   try {
-    if (choice === "system") localStorage.removeItem(THEME_KEY);
-    else localStorage.setItem(THEME_KEY, choice);
+    localStorage.setItem(THEME_KEY, theme);
   } catch {
     /* private mode: the choice lasts until reload */
   }
 }
 
-/** The tokens CSS reads `.light` / `.dark` on <html>; no class means "follow the system". */
-export function applyTheme(choice: ThemeChoice, root: { classList: DOMTokenList } = document.documentElement): void {
-  root.classList.toggle("light", choice === "light");
-  root.classList.toggle("dark", choice === "dark");
+/** The tokens CSS reads `.light` / `.dark` on <html>. */
+export function applyTheme(theme: Theme, root: { classList: DOMTokenList } = document.documentElement): void {
+  root.classList.toggle("light", theme === "light");
+  root.classList.toggle("dark", theme === "dark");
 }
