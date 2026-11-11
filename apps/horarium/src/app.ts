@@ -67,6 +67,31 @@ function patientSummary(r: Record<string, unknown>) {
   };
 }
 
+/**
+ * WHERE clause for the patient list. Text that is only digits and phone punctuation (3+ digits)
+ * matches anywhere in the phone number; otherwise every word must start the first name, the
+ * surname, or a part of a double-barrelled surname ("Kowal" finds "Nowak-Kowalska").
+ */
+export function patientFilter(q: string): { where: string; params: string[] } {
+  const text = q.trim();
+  if (!text) return { where: "", params: [] };
+  const digits = text.replace(/[\s\-+().]/g, "");
+  if (/^\d{3,}$/.test(digits)) {
+    return { where: "WHERE regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g') LIKE $1", params: [`%${digits}%`] };
+  }
+  const params: string[] = [];
+  const clauses = text
+    .toLowerCase()
+    .split(/\s+/)
+    .slice(0, 5)
+    .map((word) => {
+      params.push(`${word.replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
+      const n = `$${params.length}`;
+      return `(lower(last_name) LIKE ${n} OR lower(first_name) LIKE ${n} OR lower(last_name) LIKE '%-' || ${n})`;
+    });
+  return { where: `WHERE ${clauses.join(" AND ")}`, params };
+}
+
 function noFields(): never {
   throw Object.assign(new Error("Brak pól do zmiany."), { statusCode: 400 });
 }
@@ -271,6 +296,39 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
         [phone, `${q.toLowerCase()}%`, limit],
       );
       return rows.map(patientSummary);
+    },
+  );
+
+  // Paged list for the Patients view: everyone, or narrowed by name or phone digits.
+  app.get<{ Querystring: { q?: string; page?: number; pageSize?: number } }>(
+    "/api/patients/list",
+    {
+      preHandler: guard(ALL),
+      schema: {
+        querystring: {
+          type: "object",
+          properties: {
+            q: { type: "string", maxLength: 100 },
+            page: { type: "integer", minimum: 1, default: 1 },
+            pageSize: { type: "integer", minimum: 1, maximum: 100, default: 25 },
+          },
+        },
+      },
+    },
+    async (req) => {
+      const page = req.query.page ?? 1;
+      const pageSize = req.query.pageSize ?? 25;
+      const { where, params } = patientFilter(req.query.q ?? "");
+      const [list, count] = await Promise.all([
+        db.query(
+          `SELECT * FROM patients ${where}
+            ORDER BY lower(last_name), lower(first_name), id
+            LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+          [...params, pageSize, (page - 1) * pageSize],
+        ),
+        db.query(`SELECT count(*)::int AS n FROM patients ${where}`, params),
+      ]);
+      return { items: list.rows.map(patientSummary), total: count.rows[0].n, page, pageSize };
     },
   );
 

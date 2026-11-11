@@ -129,6 +129,29 @@ describe("horarium API", { skip: TEST_DATABASE_URL ? false : "TEST_DATABASE_URL 
     assert.equal(byName.body[0].medicalFlags, undefined);
     assert.equal(byName.body[0].notes, undefined);
 
+    for (const [firstName, lastName, phone] of [
+      ["Anna", "Nowak-Kowalska", "512 300 400"],
+      ["Piotr", "Kowalski", null],
+      ["Zofia", "Abacka", "601 222 333"],
+    ]) {
+      assert.equal((await call("POST", "/api/patients", "recepcja.turek", { firstName, lastName, phone })).status, 201);
+    }
+    const names = (body: { items: { lastName: string }[] }) => body.items.map((p) => p.lastName);
+    const all = await call("GET", "/api/patients/list?pageSize=2", "dr.kowalska");
+    assert.equal(all.status, 200);
+    assert.equal(all.body.total, 4);
+    assert.deepEqual(names(all.body), ["Abacka", "Kowalski"]);
+    const page2 = await call("GET", "/api/patients/list?pageSize=2&page=2", "dr.kowalska");
+    assert.deepEqual(names(page2.body), ["Nowak-Kowalska", "Testowy"]);
+    assert.equal(page2.body.items[0].medicalFlags, undefined);
+    const kowal = await call("GET", "/api/patients/list?q=kowal", "recepcja.turek");
+    assert.deepEqual(names(kowal.body), ["Kowalski", "Nowak-Kowalska"]);
+    assert.deepEqual(names((await call("GET", "/api/patients/list?q=anna%20kow", "admin")).body), ["Nowak-Kowalska"]);
+    assert.deepEqual(names((await call("GET", "/api/patients/list?q=300%20400", "admin")).body), ["Nowak-Kowalska"]);
+    assert.deepEqual(names((await call("GET", "/api/patients/list?q=%2B48601", "admin")).body), ["Abacka"]);
+    const none = await call("GET", "/api/patients/list?q=%25", "admin");
+    assert.equal(none.body.total, 0);
+
     const patched = await call("PATCH", `/api/patients/${created.body.id}`, "recepcja.turek", { notes: "alergia" });
     assert.equal(patched.status, 200);
     const log = await db.query("SELECT changes FROM audit_log WHERE action = 'patient.update'");

@@ -43,6 +43,12 @@ export interface Patient {
 }
 /** What the patient search returns: no notes or medical flags. */
 export type PatientSummary = Pick<Patient, "id" | "firstName" | "lastName" | "phone" | "birthDate">;
+export interface PatientPage {
+  items: PatientSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
 export interface HistoryEntry {
   id: number;
   at: string;
@@ -116,6 +122,8 @@ export const api = {
   createService: (body: Partial<ServiceInput>) => request<{ id: number }>("POST", "/api/services", body),
   updateService: (id: number, body: Partial<ServiceInput>) => request<{ ok: true }>("PATCH", `/api/services/${id}`, body),
   searchPatients: (q: string) => request<PatientSummary[]>("GET", `/api/patients?${qs({ q, limit: 15 })}`),
+  listPatients: (q: string, page: number, pageSize: number) =>
+    request<PatientPage>("GET", `/api/patients/list?${qs({ q, page, pageSize })}`),
   patient: (id: number) => request<Patient & { appointments: Appointment[] }>("GET", `/api/patients/${id}`),
   patientHistory: (id: number) => request<HistoryEntry[]>("GET", `/api/patients/${id}/history`),
   createPatient: (body: Partial<Patient>) => request<{ id: number }>("POST", "/api/patients", body),
