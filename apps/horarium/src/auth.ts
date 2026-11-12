@@ -60,12 +60,8 @@ export async function createUser(
   return rows[0].id;
 }
 
-/** Returns a session token, or null for an unknown login or wrong password. */
-export async function login(
-  db: Db,
-  loginName: string,
-  password: string,
-): Promise<{ token: string; user: User } | null> {
+/** The active user with this login and password, or null. Opens no session. */
+export async function checkCredentials(db: Db, loginName: string, password: string): Promise<User | null> {
   const { rows } = await db.query(
     "SELECT id, login, name, role, staff_id, password_hash FROM users WHERE login = $1 AND active",
     [loginName.toLowerCase()],
@@ -76,15 +72,33 @@ export async function login(
     await verifyPassword(password, await dummyHash);
     return null;
   }
-  if (!(await verifyPassword(password, row.password_hash))) return null;
+  return (await verifyPassword(password, row.password_hash)) ? toUser(row) : null;
+}
+
+/** Returns a session token, or null for an unknown login or wrong password. */
+export async function login(
+  db: Db,
+  loginName: string,
+  password: string,
+): Promise<{ token: string; user: User } | null> {
+  const user = await checkCredentials(db, loginName, password);
+  if (!user) return null;
   await db.query("DELETE FROM sessions WHERE expires_at < now()");
   const token = randomBytes(32).toString("base64url");
   await db.query(
     "INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, now() + make_interval(hours => $3))",
-    [sha256(token), row.id, SESSION_HOURS],
+    [sha256(token), user.id, SESSION_HOURS],
   );
-  return { token, user: toUser(row) };
+  return { token, user };
 }
+
+/** Opaque random token and the hash stored for it (sessions, paired tablets). */
+export function newToken(): { token: string; hash: string } {
+  const token = randomBytes(32).toString("base64url");
+  return { token, hash: sha256(token) };
+}
+
+export { sha256 as hashToken };
 
 export async function userForToken(db: Db, token: string): Promise<User | null> {
   const { rows } = await db.query(

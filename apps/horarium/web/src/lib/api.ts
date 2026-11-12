@@ -116,10 +116,45 @@ export interface ScheduleBlock {
   kind: "work" | "absence";
 }
 
+import type { Answers, IntakeForm, PatientDraft } from "../../../src/intake-form.ts";
+
+export type KioskState =
+  | { paired: false; sites: Site[] }
+  | { paired: true; device: { name: string; siteName: string }; form: IntakeForm };
+
+export interface IntakeSummary {
+  id: number;
+  createdAt: string;
+  siteId: string;
+  deviceName: string | null;
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+  birthDate: string | null;
+  status: "new" | "accepted";
+  patientId: number | null;
+}
+export interface IntakeDetail extends IntakeSummary {
+  formVersion: string;
+  answers: Answers;
+  draft: PatientDraft;
+  matches: PatientSummary[];
+}
+export interface KioskDevice {
+  id: number;
+  name: string;
+  siteId: string;
+  createdAt: string;
+  lastSeenAt: string | null;
+  createdByName: string | null;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** Per-field messages, when the server checked a form. */
+    readonly fields?: Record<string, string>,
   ) {
     super(message);
   }
@@ -134,7 +169,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   });
   const data = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) {
-    throw new ApiError(res.status, (data as { error?: string } | null)?.error ?? `Błąd ${res.status}`);
+    const err = data as { error?: string; fields?: Record<string, string> } | null;
+    throw new ApiError(res.status, err?.error ?? `Błąd ${res.status}`, err?.fields);
   }
   return data as T;
 }
@@ -179,6 +215,18 @@ export const api = {
   createPatient: (body: Partial<Patient>) => request<{ id: number }>("POST", "/api/patients", body),
   updatePatient: (id: number, body: Partial<Omit<Patient, "id">>) =>
     request<{ ok: true }>("PATCH", `/api/patients/${id}`, body),
+  intake: (status: "new" | "accepted") => request<IntakeSummary[]>("GET", `/api/intake?${qs({ status })}`),
+  intakeDetail: (id: number) => request<IntakeDetail>("GET", `/api/intake/${id}`),
+  acceptIntake: (id: number, patientId?: number) =>
+    request<{ ok: true; patientId: number }>("POST", `/api/intake/${id}/accept`, patientId ? { patientId } : {}),
+  deleteIntake: (id: number) => request<{ ok: true }>("DELETE", `/api/intake/${id}`),
+  kioskDevices: () => request<KioskDevice[]>("GET", "/api/kiosk-devices"),
+  revokeKioskDevice: (id: number) => request<{ ok: true }>("DELETE", `/api/kiosk-devices/${id}`),
+  kioskState: () => request<KioskState>("GET", "/api/kiosk/state"),
+  kioskPair: (body: { login: string; password: string; siteId: string; name: string }) =>
+    request<{ ok: true }>("POST", "/api/kiosk/pair", body),
+  kioskUnpair: (login: string, password: string) => request<{ ok: true }>("POST", "/api/kiosk/unpair", { login, password }),
+  kioskSubmit: (answers: Answers) => request<{ ok: true }>("POST", "/api/kiosk/submissions", { answers }),
   appointments: (site: string, from: string, to: string) =>
     request<Appointment[]>("GET", `/api/appointments?${qs({ site, from, to })}`),
   schedules: (site: string, from: string, to: string) =>

@@ -17,3 +17,21 @@ body,
     font-size: max(16px, 1em);
   }
 }
+
+/* Patient form on the clinic iPad (/rejestracja): no text selection or long-press menus outside the
+   fields, no double-tap zoom, no rubber-band scrolling of the whole page. */
+html.kiosk {
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
+html.kiosk body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+html.kiosk input,
+html.kiosk textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}

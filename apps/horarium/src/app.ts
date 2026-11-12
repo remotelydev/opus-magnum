@@ -2,6 +2,7 @@ import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { login, logout, ROLES, userForToken, type Role, type User } from "./auth.js";
 import { audit, type Db } from "./db.js";
+import { registerIntake } from "./intake.js";
 import { createLoginLimiter, type LoginLimiter } from "./login-limit.js";
 import { normalizePhone } from "./phone.js";
 import { registerServices } from "./services.js";
@@ -222,6 +223,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
 
   registerSettings(app, db, { read: guard(ALL), write: guard(WRITE_ROLES), admin: guard(ADMIN) }, opts.publicOrigins ?? []);
   registerServices(app, db, { read: guard(ALL), admin: guard(ADMIN) }, opts.publicOrigins ?? []);
+  registerIntake(app, db, { desk: guard(WRITE_ROLES) }, limiter);
 
   // --- patients ---------------------------------------------------------------------------
   app.get<{ Querystring: { q?: string; limit?: number } }>(
