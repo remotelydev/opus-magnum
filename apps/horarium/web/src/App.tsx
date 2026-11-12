@@ -4,6 +4,7 @@ import { UserGroupIcon } from "@heroicons/react/24/outline";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DayStaffPanel } from "./components/DayStaffPanel.tsx";
 import { DayView } from "./components/DayView.tsx";
+import { IntakePage } from "./components/IntakePage.tsx";
 import { PatientsPage } from "./components/PatientsPage.tsx";
 import { OpeningHoursPage } from "./components/OpeningHoursPage.tsx";
 import { SchedulePage } from "./components/SchedulePage.tsx";
@@ -63,6 +64,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [view, setView] = useState<View>("calendar");
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [scheduleStaff, setScheduleStaff] = useState<number | null>(null);
+  const [openPatient, setOpenPatient] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   // Which people get a column: whoever works that day, or the user's own ticks (remembered per site).
   const [choice, setChoice] = useState<ColumnChoice>(() => readChoice(readSite() ?? "turek"));
@@ -98,7 +100,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   useEffect(() => {
     // Reference data for the calendar and patients; reloaded on return so settings changes show up.
-    if (view !== "calendar" && view !== "patients") return;
+    if (view !== "calendar" && view !== "patients" && view !== "intake") return;
     Promise.all([api.sites(), api.staff(), api.services()])
       .then(([si, st, se]) => {
         setSites(si);
@@ -125,6 +127,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   const openView = (next: View) => {
     if (next === "schedule") setScheduleStaff(null);
+    if (next === "patients") setOpenPatient(null);
     setView(next);
     setMenuOpen(false);
   };
@@ -293,8 +296,18 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
           <SchedulePage initialStaffId={scheduleStaff} />
         ) : view === "opening" ? (
           <OpeningHoursPage />
+        ) : view === "intake" ? (
+          <IntakePage
+            sites={sites}
+            onOpenPatient={(id) => {
+              setOpenPatient(id);
+              setView("patients");
+            }}
+          />
         ) : view === "patients" ? (
           <PatientsPage
+            key={openPatient ?? "list"}
+            initialPatientId={openPatient}
             sites={sites}
             staff={staff}
             canEdit={user.role !== "doctor"}
