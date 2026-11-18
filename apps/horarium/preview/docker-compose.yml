@@ -24,6 +24,15 @@ services:
     environment:
       DATABASE_URL: postgres://horarium:horarium@db:5432/horarium_preview
       CLINIC_PASSWORD: ${CLINIC_PASSWORD:?CLINIC_PASSWORD missing in .preview/.env}
+      # Texts through the clinic's TG200 gateway, only when set in .preview/.env. The preview's patients
+      # are made up, so it sends only to the numbers in TG200_ONLY_TO (nothing when that is empty).
+      TG200_HOST: ${TG200_HOST:-}
+      TG200_PORT: ${TG200_PORT:-}
+      TG200_USERNAME: ${TG200_USERNAME:-}
+      TG200_SECRET: ${TG200_SECRET:-}
+      TG200_SPAN: ${TG200_SPAN:-}
+      TG200_ONLY_TO: ${TG200_ONLY_TO:-}
+      SMS_REQUIRE_ALLOWLIST: "1"
     ports:
       - "127.0.0.1:8791:8790"
     depends_on:

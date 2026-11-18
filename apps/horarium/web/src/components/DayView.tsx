@@ -122,17 +122,6 @@ export function DayView({
     return map;
   }, [columns, appointments, schedules, showCancelled]);
 
-  // Column groups for the "columns" variant: one header over each clinic's people.
-  const groups = useMemo(() => {
-    if (mode !== "columns") return [];
-    const out: { siteId: string; count: number }[] = [];
-    for (const c of columns) {
-      const last = out.at(-1);
-      if (last && last.siteId === c.siteId) last.count++;
-      else out.push({ siteId: c.siteId!, count: 1 });
-    }
-    return out;
-  }, [columns, mode]);
   const groupStart = (i: number) => mode === "columns" && i > 0 && columns[i - 1]!.siteId !== columns[i]!.siteId;
 
   // The click and the hover label use the same maths, so the time shown is the slot that opens.
@@ -219,16 +208,18 @@ export function DayView({
           style={{ "--cols": columns.length } as CSSProperties}
         >
           <div className={`sticky top-0 z-20 border-b border-border bg-surface`}>
-            {groups.length > 0 && (
+            {mode === "columns" && (
+              // One cell per column, built like the name cells below so the clinic bar lines up with its
+              // people exactly; the clinic's name sits in the first cell of its group.
               <div className={ROW} data-testid="site-groups">
                 <div className="sticky left-0 z-10 w-12 shrink-0 bg-surface sm:w-14" />
-                {groups.map((g, i) => (
+                {columns.map((c, i) => (
                   <div
-                    key={g.siteId}
-                    className={`min-w-0 basis-0 border-b-2 px-2 py-0.5 text-xs font-semibold ${i > 0 ? "border-l-4 border-l-border" : "border-l border-l-border"}`}
-                    style={{ flexGrow: g.count, borderBottomColor: siteColor(g.siteId), color: siteColor(g.siteId) }}
+                    key={c.key}
+                    className={`${COLUMN} border-b-2 px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${groupStart(i) ? "border-l-4 border-l-border" : "border-l border-l-transparent"} ${i === 0 || groupStart(i) ? "relative z-[1] overflow-visible" : ""}`}
+                    style={{ borderBottomColor: siteColor(c.siteId!), color: siteColor(c.siteId!) }}
                   >
-                    {siteName(sites, g.siteId)}
+                    {i === 0 || groupStart(i) ? siteName(sites, c.siteId!) : ""}
                   </div>
                 ))}
               </div>
@@ -297,9 +288,9 @@ export function DayView({
                         style={{
                           top: top * PX_PER_MIN,
                           height: (bottom - top) * PX_PER_MIN,
-                          // "Kolor": the clinic's colour down the left edge of the working hours too.
+                          // "Kolor": the working hours lightly tinted with the clinic's colour.
                           ...(mode === "color" && b.kind === "work"
-                            ? { boxShadow: `inset 3px 0 0 ${siteColor(b.siteId)}` }
+                            ? { backgroundImage: `linear-gradient(color-mix(in srgb, ${siteColor(b.siteId)} 12%, transparent), color-mix(in srgb, ${siteColor(b.siteId)} 12%, transparent))` }
                             : {}),
                         }}
                         className={`pointer-events-none absolute inset-x-0 ${
@@ -346,15 +337,17 @@ export function DayView({
                         height: height * PX_PER_MIN - 1,
                         left: `calc(${(lane / lanes) * 100}% + 2px)`,
                         width: `calc(${100 / lanes}% - 4px)`,
-                        ...(mode === "color" ? { borderLeftColor: siteColor(a.siteId) } : {}),
+                        // "Kolor": a thin stripe of the clinic's colour on the right edge; the status keeps the left.
+                        ...(mode === "color" ? { boxShadow: `inset -4px 0 0 ${siteColor(a.siteId)}` } : {}),
                       }}
                       title={all ? siteName(sites, a.siteId) : undefined}
                       data-site={a.siteId}
                       data-appt={a.id}
                     >
                       {mode === "label" && (
+                        // Bottom-right corner, small, so it stays out of the way of the name and time.
                         <span
-                          className="mr-1 inline-block rounded-sm px-1 text-[10px] font-semibold leading-4 text-white"
+                          className="pointer-events-none absolute right-0.5 bottom-0.5 rounded-sm px-1 text-[9px] font-semibold leading-3.5 text-white opacity-90"
                           style={{ background: siteColor(a.siteId) }}
                           data-testid="site-label"
                         >

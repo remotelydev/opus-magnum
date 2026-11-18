@@ -4,6 +4,7 @@ import { login, logout, ROLES, userForToken, type Role, type User } from "./auth
 import { audit, type Db } from "./db.js";
 import { createLoginLimiter, type LoginLimiter } from "./login-limit.js";
 import { normalizePhone } from "./phone.js";
+import { movedVisitText, type SendSms } from "./sms.js";
 import { registerServices } from "./services.js";
 import { CLINIC_TZ, registerSettings } from "./settings.js";
 
@@ -133,6 +134,8 @@ export interface AppOptions {
   publicOrigins?: string[];
   /** Failed-login limiter; tests pass their own. */
   loginLimiter?: LoginLimiter;
+  /** Texts patients (the clinic's TG200 gateway); without it "Powiadom pacjenta" says SMS is off. */
+  sendSms?: SendSms;
 }
 
 // Request logs keep the path only: search queries (?q=surname or phone) must not land in log files.
@@ -548,6 +551,34 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     return warnings;
   }
 
+  /**
+   * Texts the patient the new time of a moved visit, when reception ticked "Powiadom pacjenta".
+   * Sent whatever the SMS consent: it is information about their visit, not marketing. Returns the
+   * line reception sees; the change log records whether it went, never the text or the number.
+   */
+  async function notifyMoved(
+    userId: number,
+    appointmentId: number,
+    patientId: number | null,
+    next: { startsAt: string; siteId: string },
+  ): Promise<string> {
+    const fail = async (reason: string) => {
+      await audit(db, userId, "appointment.notify", "appointment", appointmentId, { channel: "sms", sent: false, reason });
+      return `SMS nie został wysłany: ${reason}.`;
+    };
+    if (!opts.sendSms) return fail("wysyłka SMS nie jest skonfigurowana");
+    if (!patientId) return fail("to nie jest wizyta pacjenta");
+    const { rows } = await db.query(
+      "SELECT p.phone, s.name AS site_name FROM patients p, sites s WHERE p.id = $1 AND s.id = $2",
+      [patientId, next.siteId],
+    );
+    if (!rows[0]?.phone) return fail("pacjent nie ma numeru telefonu");
+    const result = await opts.sendSms(rows[0].phone, movedVisitText(new Date(next.startsAt), rows[0].site_name));
+    if (!result.sent) return fail(result.reason ?? "nieznany błąd bramki");
+    await audit(db, userId, "appointment.notify", "appointment", appointmentId, { channel: "sms", sent: true });
+    return `Wysłano SMS do pacjenta (${rows[0].phone}).`;
+  }
+
   async function serviceDuration(serviceId: number | null | undefined): Promise<number | null> {
     if (!serviceId) return null;
     const { rows } = await db.query("SELECT duration_minutes FROM services WHERE id = $1", [serviceId]);
@@ -684,8 +715,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
         status: b.status,
         startsAt: b.startsAt ? next.startsAt : undefined,
       });
-      // Texting the patient is not wired up yet: say so plainly instead of pretending it went out.
-      const sms = notifyPatient ? "SMS nie został wysłany: wysyłka SMS z terminarza nie jest jeszcze podłączona." : undefined;
+      const sms = notifyPatient ? await notifyMoved(req.user!.id, req.params.id, current.patient_id, next) : undefined;
       return { ok: true, endsAt: next.endsAt, warnings, ...(sms ? { sms } : {}) };
     },
   );

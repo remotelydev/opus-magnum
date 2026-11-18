@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import net from "node:net";
 import { test } from "node:test";
-import { createTg200Sender, parseBlocks, smsCommand, tg200FromEnv, type Tg200Config } from "./sms.js";
+import { createTg200Sender, movedVisitText, parseBlocks, smsCommand, tg200FromEnv, type Tg200Config } from "./sms.js";
+
+test("the moved-visit text names the new day, time and clinic in clinic time", () => {
+  assert.equal(
+    movedVisitText(new Date("2026-11-20T09:00:00Z"), "Turek"),
+    "DentaPlus+: Państwa wizyta została przeniesiona na 20.11.2026 godz. 10:00, Turek. W razie pytań prosimy o kontakt z rejestracją.",
+  );
+});
 
 test("smsCommand keeps the message on one line and escapes quotes", () => {
   assert.equal(
@@ -40,7 +47,16 @@ async function fakeGateway(status: string) {
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const port = (server.address() as net.AddressInfo).port;
-  const config: Tg200Config = { host: "127.0.0.1", port, username: "api", secret: "pw", span: 2, onlyTo: null, timeoutMs: 2000 };
+  const config: Tg200Config = {
+    host: "127.0.0.1",
+    port,
+    username: "api",
+    secret: "pw",
+    span: 2,
+    onlyTo: null,
+    requireAllowlist: false,
+    timeoutMs: 2000,
+  };
   return { server, seen, config };
 }
 
@@ -62,6 +78,8 @@ test("sender reports a failed delivery, and refuses numbers off the test list", 
     const limited = await createTg200Sender({ ...config, onlyTo: ["+48111222333"] })("+48600100200", "Test");
     assert.equal(limited.sent, false);
     assert.match(limited.reason!, /liście testowej/);
+    const preview = await createTg200Sender({ ...config, requireAllowlist: true })("+48600100200", "Test");
+    assert.equal(preview.sent, false);
   } finally {
     server.close();
   }

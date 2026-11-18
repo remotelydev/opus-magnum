@@ -255,7 +255,7 @@ describe("horarium API", { skip: TEST_DATABASE_URL ? false : "TEST_DATABASE_URL 
       notifyPatient: true,
     });
     assert.equal(notified.status, 200);
-    assert.match(notified.body.sms, /nie został wysłany/);
+    assert.match(notified.body.sms, /nie został wysłany: wysyłka SMS nie jest skonfigurowana/);
     const quiet = await call("PATCH", `/api/appointments/${reuse.body.id}`, "recepcja.turek", { startsAt: "2026-12-01T10:00:00Z" });
     assert.equal(quiet.body.sms, undefined);
 
@@ -294,6 +294,33 @@ describe("horarium API", { skip: TEST_DATABASE_URL ? false : "TEST_DATABASE_URL 
     }
     const view = history.body.find((e: { action: string }) => e.action === "patient.view");
     assert.equal(view.userName, "Dr Kowalska");
+  });
+
+  test("a confirmed move texts the patient through the gateway when asked", async () => {
+    const texts: { to: string; text: string }[] = [];
+    const texting = buildApp(db, {
+      sendSms: async (to, text) => {
+        texts.push({ to, text });
+        return { sent: true };
+      },
+    });
+    const send = (url: string, payload: object) =>
+      texting.inject({ method: "PATCH", url, payload, headers: { authorization: `Bearer ${tokens["recepcja.turek"]}` } });
+    const visit = (await db.query("SELECT a.id FROM appointments a JOIN patients p ON p.id = a.patient_id WHERE p.phone IS NOT NULL LIMIT 1")).rows[0];
+    const moved = await send(`/api/appointments/${visit.id}`, { startsAt: "2026-12-01T13:00:00Z", notifyPatient: true });
+    assert.equal(moved.statusCode, 200);
+    assert.match(moved.json().sms, /^Wysłano SMS/);
+    assert.equal(texts.length, 1);
+    assert.match(texts[0]!.text, /01\.12\.2026 godz\. 14:00, Turek/);
+    // No tick, no text.
+    await send(`/api/appointments/${visit.id}`, { startsAt: "2026-12-01T13:30:00Z" });
+    assert.equal(texts.length, 1);
+    const log = await db.query(
+      "SELECT changes FROM audit_log WHERE action = 'appointment.notify' AND entity_id = $1 ORDER BY id DESC LIMIT 1",
+      [String(visit.id)],
+    );
+    assert.deepEqual(log.rows[0].changes, { channel: "sms", sent: true });
+    await texting.close();
   });
 
   test("failed logins are limited and logged", async () => {

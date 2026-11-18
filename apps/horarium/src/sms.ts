@@ -20,6 +20,8 @@ export interface Tg200Config {
   span: number;
   /** Optional allowlist (E.164). When set, only these numbers get texts: for the demo preview. */
   onlyTo: string[] | null;
+  /** The demo preview sets this: with no allowlist nothing is sent, so made-up patients never get texts. */
+  requireAllowlist: boolean;
   timeoutMs: number;
 }
 
@@ -32,16 +34,28 @@ export function tg200FromEnv(env: NodeJS.ProcessEnv = process.env): Tg200Config 
     .filter(Boolean);
   return {
     host: env.TG200_HOST,
-    port: Number(env.TG200_PORT ?? 5038),
     username: env.TG200_USERNAME,
     secret: env.TG200_SECRET,
-    span: Number(env.TG200_SPAN ?? 2),
+    port: Number(env.TG200_PORT || 5038),
+    span: Number(env.TG200_SPAN || 2),
     onlyTo: onlyTo.length ? onlyTo : null,
-    timeoutMs: Number(env.TG200_TIMEOUT_MS ?? 20_000),
+    requireAllowlist: env.SMS_REQUIRE_ALLOWLIST === "1",
+    timeoutMs: Number(env.TG200_TIMEOUT_MS || 20_000),
   };
 }
 
 /** The message as the gateway's "gsm send sms" command takes it: one line, quotes and backslashes escaped. */
+const dayFmt = new Intl.DateTimeFormat("pl-PL", { timeZone: "Europe/Warsaw", day: "2-digit", month: "2-digit", year: "numeric" });
+const timeFmt = new Intl.DateTimeFormat("pl-PL", { timeZone: "Europe/Warsaw", hour: "2-digit", minute: "2-digit" });
+
+/**
+ * The text a patient gets after their visit is moved. A first proposal, to be agreed with the clinic
+ * before go-live (wording, the clinic's phone number).
+ */
+export function movedVisitText(startsAt: Date, siteName: string): string {
+  return `DentaPlus+: Państwa wizyta została przeniesiona na ${dayFmt.format(startsAt)} godz. ${timeFmt.format(startsAt)}, ${siteName}. W razie pytań prosimy o kontakt z rejestracją.`;
+}
+
 export function smsCommand(span: number, to: string, text: string, id: string): string {
   const body = text.replace(/\r?\n/g, " ").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
   return `gsm send sms ${span} ${to} "${body}" ${id}`;
@@ -65,6 +79,10 @@ export function parseBlocks(buffer: string): { blocks: Record<string, string>[];
 export function createTg200Sender(config: Tg200Config): SendSms {
   return (to, text) =>
     new Promise((resolve) => {
+      if (config.requireAllowlist && !config.onlyTo) {
+        resolve({ sent: false, reason: "w podglądzie SMS-y idą tylko na numery z listy testowej, a lista jest pusta" });
+        return;
+      }
       if (config.onlyTo && !config.onlyTo.includes(to)) {
         resolve({ sent: false, reason: "ten numer nie jest na liście testowej (TG200_ONLY_TO)" });
         return;
