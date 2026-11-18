@@ -259,7 +259,26 @@ describe("horarium API", { skip: TEST_DATABASE_URL ? false : "TEST_DATABASE_URL 
     const quiet = await call("PATCH", `/api/appointments/${reuse.body.id}`, "recepcja.turek", { startsAt: "2026-12-01T10:00:00Z" });
     assert.equal(quiet.body.sms, undefined);
 
+    // The doctor's treatment description: doctors write it, reception cannot, the log keeps no text.
+    const described = await call("PUT", `/api/appointments/${reuse.body.id}/treatment`, "dr.kowalska", {
+      text: "Wypełnienie 36, zalecona kontrola za pół roku.",
+    });
+    assert.equal(described.status, 200);
+    assert.equal(
+      (await call("PUT", `/api/appointments/${reuse.body.id}/treatment`, "recepcja.turek", { text: "x" })).status,
+      403,
+    );
+    const logged = await db.query(
+      "SELECT changes FROM audit_log WHERE entity = 'appointment' AND entity_id = $1 ORDER BY id DESC LIMIT 1",
+      [String(reuse.body.id)],
+    );
+    assert.deepEqual(logged.rows[0].changes, { fields: ["treatmentNotes"] });
+
     const card = await call("GET", `/api/patients/${patientId}`, "dr.kowalska");
+    assert.equal(
+      card.body.appointments.find((a: { id: number }) => a.id === reuse.body.id).treatmentNotes,
+      "Wypełnienie 36, zalecona kontrola za pół roku.",
+    );
     assert.equal(card.body.appointments.length, 2);
     assert.deepEqual(card.body.medicalFlags, ["cukrzyca"]);
   });

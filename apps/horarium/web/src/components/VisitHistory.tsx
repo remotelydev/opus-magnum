@@ -56,7 +56,18 @@ export function VisitHistory({ visits, staff, sites, limit, compact = false, onO
               {doctor(a.staffId)} · <span data-testid="visit-site">{siteName(sites, a.siteId)}</span>
               {compact ? ` · ${STATUS_LABEL[a.status]}` : ""}
             </p>
-            {a.notes && <p className="mt-1 whitespace-pre-line">{a.notes}</p>}
+            {a.treatmentNotes && (
+              <p className="mt-1 whitespace-pre-line" data-testid="treatment">
+                <span className="font-medium">Opis leczenia: </span>
+                {a.treatmentNotes}
+              </p>
+            )}
+            {a.notes && (
+              <p className="mt-1 whitespace-pre-line text-muted-foreground">
+                <span className="font-medium">Notatka: </span>
+                {a.notes}
+              </p>
+            )}
           </li>
         );
       })}

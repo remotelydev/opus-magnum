@@ -25,6 +25,7 @@ const FIELD_LABEL: Record<string, string> = {
   status: "status",
   serviceId: "usługa",
   title: "opis",
+  treatmentNotes: "opis leczenia",
 };
 
 const historyTime = new Intl.DateTimeFormat("pl-PL", {

@@ -413,6 +413,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               services={services}
               canEdit={user.role !== "doctor"}
               canSeeHistory={user.role === "admin"}
+              canDescribe={user.role === "admin" || user.role === "doctor"}
               showCancelled={showCancelled}
             />
           </div>

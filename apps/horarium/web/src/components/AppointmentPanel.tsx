@@ -22,6 +22,8 @@ interface Props {
   sites: Site[];
   canEdit: boolean;
   canSeeHistory?: boolean;
+  /** Doctors and admins write the treatment description. */
+  canDescribe?: boolean;
   onClose: () => void;
   onChanged: (message: string) => void;
   /** "Karta pacjenta": open the patient's full card. */
@@ -38,6 +40,7 @@ export function AppointmentPanel({
   sites,
   canEdit,
   canSeeHistory = false,
+  canDescribe = false,
   onClose,
   onChanged,
   onOpenPatient,
@@ -52,6 +55,7 @@ export function AppointmentPanel({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [treatment, setTreatment] = useState(a.treatmentNotes ?? "");
   // A new time waits for confirmation, as a drag does.
   const [pendingTime, setPendingTime] = useState<{ startsAt: Date; endsAt: Date; minutes: number } | null>(null);
 
@@ -79,6 +83,19 @@ export function AppointmentPanel({
     } catch (err) {
       setError((err as Error).message);
       return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveTreatment = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.saveTreatment(a.id, treatment.trim() || null);
+      onChanged("Zapisano opis leczenia.");
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
       setBusy(false);
     }
@@ -208,6 +225,36 @@ export function AppointmentPanel({
         <p role="alert" className="text-destructive">
           {error}
         </p>
+      )}
+
+      {a.patientId && (canDescribe || a.treatmentNotes) && (
+        <section className="space-y-1">
+          <Label htmlFor="p-treatment">Opis leczenia</Label>
+          {canDescribe ? (
+            <>
+              <textarea
+                id="p-treatment"
+                rows={4}
+                value={treatment}
+                onChange={(e) => setTreatment(e.target.value)}
+                className="w-full rounded-md border border-input bg-surface px-3 py-2 text-sm"
+                placeholder="Co zostało zrobione, zalecenia, plan na następną wizytę"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy || treatment.trim() === (a.treatmentNotes ?? "")}
+                onClick={saveTreatment}
+              >
+                Zapisz opis
+              </Button>
+            </>
+          ) : (
+            <p id="p-treatment" className="whitespace-pre-line">
+              {a.treatmentNotes}
+            </p>
+          )}
+        </section>
       )}
 
       {patient && (

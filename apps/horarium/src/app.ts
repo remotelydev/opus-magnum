@@ -114,6 +114,7 @@ function appointmentRow(r: Record<string, unknown>) {
     status: r.status,
     source: r.source,
     notes: r.notes,
+    treatmentNotes: r.treatment_notes ?? null,
   };
 }
 
@@ -686,6 +687,29 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
       // Texting the patient is not wired up yet: say so plainly instead of pretending it went out.
       const sms = notifyPatient ? "SMS nie został wysłany: wysyłka SMS z terminarza nie jest jeszcze podłączona." : undefined;
       return { ok: true, endsAt: next.endsAt, warnings, ...(sms ? { sms } : {}) };
+    },
+  );
+
+  // The doctor's description of the treatment. Doctors and admins write it; reception does not.
+  // The change log keeps only that it changed, never the medical text.
+  app.put<{ Params: { id: number }; Body: { text: string | null } }>(
+    "/api/appointments/:id/treatment",
+    {
+      preHandler: guard(["admin", "doctor"]),
+      schema: {
+        params: { type: "object", properties: { id: { type: "integer" } } },
+        body: { type: "object", required: ["text"], properties: { text: { type: ["string", "null"], maxLength: 20000 } } },
+      },
+    },
+    async (req, reply) => {
+      const text = req.body.text?.trim() || null;
+      const { rowCount } = await db.query(
+        "UPDATE appointments SET treatment_notes = $2, updated_at = now() WHERE id = $1",
+        [req.params.id, text],
+      );
+      if (!rowCount) return reply.code(404).send({ error: "Nie ma takiej wizyty." });
+      await audit(db, req.user!.id, "appointment.update", "appointment", req.params.id, { fields: ["treatmentNotes"] });
+      return { ok: true };
     },
   );
 

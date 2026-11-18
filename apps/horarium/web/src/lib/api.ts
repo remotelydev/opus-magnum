@@ -106,6 +106,8 @@ export interface Appointment {
   status: AppointmentStatus;
   source: "desk" | "bot" | "import";
   notes: string | null;
+  /** The doctor's description of the treatment ("opis leczenia"). */
+  treatmentNotes: string | null;
 }
 export interface ScheduleBlock {
   id: number;
@@ -206,6 +208,8 @@ export const api = {
       notifyPatient: boolean;
     }>,
   ) => request<{ ok: true; endsAt: string; warnings: string[]; sms?: string }>("PATCH", `/api/appointments/${id}`, body),
+  saveTreatment: (id: number, text: string | null) =>
+    request<{ ok: true }>("PUT", `/api/appointments/${id}/treatment`, { text }),
 };
 
 export { STATUS_LABEL } from "@opus-magnum/dentaplus-ui/components/status";

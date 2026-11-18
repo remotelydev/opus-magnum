@@ -47,6 +47,8 @@ interface Props {
   canEdit: boolean;
   /** Admins see each patient's change log in the visit panel. */
   canSeeHistory?: boolean;
+  /** Doctors and admins write the treatment description in the visit panel. */
+  canDescribe?: boolean;
   /** "Pokaż odwołane" in the header: cancelled and no-show visits stay on the calendar. */
   showCancelled?: boolean;
   /** Visit to open on arrival, e.g. after "Pokaż w terminarzu" in the patient card. */
@@ -73,6 +75,7 @@ export function DayView({
   services,
   canEdit,
   canSeeHistory = false,
+  canDescribe = false,
   showCancelled = true,
   initialSelected = null,
   onOpenPatient,
@@ -386,6 +389,7 @@ export function DayView({
           onOpenVisit={onOpenVisit}
           canEdit={canEdit}
           canSeeHistory={canSeeHistory}
+          canDescribe={canDescribe}
           onClose={() => setSelected(null)}
           onChanged={(message) => {
             setNotice(message);
