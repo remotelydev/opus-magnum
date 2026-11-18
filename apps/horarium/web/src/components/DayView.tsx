@@ -3,7 +3,7 @@ import { calendar } from "@opus-magnum/dentaplus-ui/tokens";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { api, type Appointment, type ScheduleBlock, type Service, type Site, type Staff } from "../lib/api.ts";
 import { staffColor } from "../lib/columns.ts";
-import { ALL_SITES, siteColor, siteName, type AllVariant, type CalendarColumn } from "../lib/sites.ts";
+import { ALL_SITES, siteColor, siteName, type CalendarColumn } from "../lib/sites.ts";
 import {
   DAY_END_MIN,
   DAY_START_MIN,
@@ -31,12 +31,10 @@ interface Props {
   /** A site id, or ALL_SITES for both clinics on one calendar. */
   site: string;
   sites: Site[];
-  /** How "Wszystkie" tells the clinics apart; ignored for a single site. */
-  variant?: AllVariant;
   date: string;
   /** Everyone at the site: the booking and visit dialogs can pick any of them. */
   staff: Staff[];
-  /** The people ticked in the staff panel, one column each (one per clinic in the "columns" variant). */
+  /** The people ticked in the staff panel, one column each. */
   columns: CalendarColumn[];
   /** The day's data, loaded once for the calendar and the staff panel (see useDayData). */
   appointments: Appointment[];
@@ -64,7 +62,6 @@ type Move = { appt: Appointment; staffId: number; siteId: string; startMin: numb
 export function DayView({
   site,
   sites,
-  variant = "color",
   date,
   staff,
   columns,
@@ -82,7 +79,6 @@ export function DayView({
   onOpenVisit,
 }: Props) {
   const all = site === ALL_SITES;
-  const mode: AllVariant | null = all ? variant : null;
   const [notice, setNotice] = useState<string | null>(null);
   const [booking, setBooking] = useState<Booking | null>(null);
   const [selected, setSelected] = useState<number | null>(initialSelected);
@@ -105,7 +101,7 @@ export function DayView({
     el.scrollIntoView({ block: "center", inline: "center" });
   });
 
-  // Each column's visits and hours; a column limited to one clinic ("columns" variant) only gets that clinic's.
+  // Each column's visits and hours.
   const byColumn = useMemo(() => {
     const map = new Map<string, { appts: Appointment[]; blocks: ScheduleBlock[] }>();
     for (const c of columns) {
@@ -122,7 +118,6 @@ export function DayView({
     return map;
   }, [columns, appointments, schedules, showCancelled]);
 
-  const groupStart = (i: number) => mode === "columns" && i > 0 && columns[i - 1]!.siteId !== columns[i]!.siteId;
 
   // The click and the hover label use the same maths, so the time shown is the slot that opens.
   const minutesFromEvent = (e: { clientY: number; currentTarget: HTMLElement }) =>
@@ -208,28 +203,12 @@ export function DayView({
           style={{ "--cols": columns.length } as CSSProperties}
         >
           <div className={`sticky top-0 z-20 border-b border-border bg-surface`}>
-            {mode === "columns" && (
-              // One cell per column, built like the name cells below so the clinic bar lines up with its
-              // people exactly; the clinic's name sits in the first cell of its group.
-              <div className={ROW} data-testid="site-groups">
-                <div className="sticky left-0 z-10 w-12 shrink-0 bg-surface sm:w-14" />
-                {columns.map((c, i) => (
-                  <div
-                    key={c.key}
-                    className={`${COLUMN} border-b-2 px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${groupStart(i) ? "border-l-4 border-l-border" : "border-l border-l-transparent"} ${i === 0 || groupStart(i) ? "relative z-[1] overflow-visible" : ""}`}
-                    style={{ borderBottomColor: siteColor(c.siteId!), color: siteColor(c.siteId!) }}
-                  >
-                    {i === 0 || groupStart(i) ? siteName(sites, c.siteId!) : ""}
-                  </div>
-                ))}
-              </div>
-            )}
             <div className={ROW}>
               <div className="sticky left-0 z-10 w-12 shrink-0 bg-surface sm:w-14" />
               {columns.map((c, i) => (
                 <div
                   key={c.key}
-                  className={`${COLUMN} border-t-4 px-2 py-1 text-xs font-medium ${groupStart(i) ? "border-l-4 border-l-border" : "border-l border-l-border"}`}
+                  className={`${COLUMN} border-t-4 border-l border-l-border px-2 py-1 text-xs font-medium`}
                   style={{ borderTopColor: staffColor(c.staff) }}
                 >
                   <span className="line-clamp-2">{c.staff.name}</span>
@@ -258,7 +237,7 @@ export function DayView({
               return (
                 <div
                   key={c.key}
-                  className={`${COLUMN} relative mt-2 snap-start border-border bg-calendar-off ${groupStart(i) ? "border-l-4" : "border-l"}`}
+                  className={`${COLUMN} relative mt-2 snap-start border-l border-border bg-calendar-off`}
                   onClick={(e) => {
                     if (!canEdit || e.target !== e.currentTarget) return;
                     setBooking({ staffId: s.id, startMin: minutesFromEvent(e), siteId: c.siteId ?? (all ? null : site) });
@@ -288,8 +267,8 @@ export function DayView({
                         style={{
                           top: top * PX_PER_MIN,
                           height: (bottom - top) * PX_PER_MIN,
-                          // "Kolor": the working hours lightly tinted with the clinic's colour.
-                          ...(mode === "color" && b.kind === "work"
+                          // Both clinics: the working hours lightly tinted with the clinic's colour.
+                          ...(all && b.kind === "work"
                             ? { backgroundImage: `linear-gradient(color-mix(in srgb, ${siteColor(b.siteId)} 12%, transparent), color-mix(in srgb, ${siteColor(b.siteId)} 12%, transparent))` }
                             : {}),
                         }}
@@ -337,23 +316,13 @@ export function DayView({
                         height: height * PX_PER_MIN - 1,
                         left: `calc(${(lane / lanes) * 100}% + 2px)`,
                         width: `calc(${100 / lanes}% - 4px)`,
-                        // "Kolor": the stripe on the left edge in the clinic's colour.
-                        ...(mode === "color" ? { borderLeftColor: siteColor(a.siteId) } : {}),
+                        // Both clinics: the stripe on the left edge in the clinic's colour.
+                        ...(all ? { borderLeftColor: siteColor(a.siteId) } : {}),
                       }}
                       title={all ? siteName(sites, a.siteId) : undefined}
                       data-site={a.siteId}
                       data-appt={a.id}
                     >
-                      {mode === "label" && (
-                        // Bottom-right corner, small, so it stays out of the way of the name and time.
-                        <span
-                          className="pointer-events-none absolute right-0.5 bottom-0.5 rounded-sm px-1 text-[9px] font-semibold leading-3.5 text-white opacity-90"
-                          style={{ background: siteColor(a.siteId) }}
-                          data-testid="site-label"
-                        >
-                          {siteName(sites, a.siteId)}
-                        </span>
-                      )}
                       <span className="font-medium">
                         {formatMinutes(startMin)}–{formatMinutes(endMin)}{" "}
                         {a.patientName ?? a.title ?? "Blokada"}

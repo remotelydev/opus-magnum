@@ -14,7 +14,7 @@ import { BottomNav, Sidebar, type View } from "./components/Sidebar.tsx";
 import { api, ApiError, type Service, type Site, type Staff, type User } from "./lib/api.ts";
 import { readChoice, saveChoice, selectedIds, workHours, workingIds, type ColumnChoice } from "./lib/columns.ts";
 import { readCollapsed, saveCollapsed } from "./lib/sidebar.ts";
-import { ALL_SITES, ALL_VARIANTS, calendarColumns, siteColor, type AllVariant } from "./lib/sites.ts";
+import { ALL_SITES, calendarColumns, siteColor } from "./lib/sites.ts";
 import { addDays, formatDay, todayInClinic } from "./lib/time.ts";
 import { useDayData } from "./lib/useDayData.ts";
 import { useMediaQuery } from "./lib/useMediaQuery.ts";
@@ -22,17 +22,6 @@ import { useMediaQuery } from "./lib/useMediaQuery.ts";
 const SITE_KEY = "horarium.site";
 /** Whether the day-and-staff panel is shown beside the calendar on wide screens. */
 const DAY_PANEL_KEY = "horarium.dayPanel";
-/** How "Wszystkie" shows the two clinics (kolor / etykieta / kolumny), remembered on this computer. */
-const ALL_VARIANT_KEY = "horarium.allVariant";
-
-function readVariant(): AllVariant {
-  try {
-    const v = localStorage.getItem(ALL_VARIANT_KEY);
-    return ALL_VARIANTS.some((x) => x.id === v) ? (v as AllVariant) : "color";
-  } catch {
-    return "color";
-  }
-}
 
 function readPanelPinned(): boolean {
   try {
@@ -85,7 +74,6 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const day = useDayData(site, date, view === "calendar");
   const [showCancelled, setShowCancelled] = useState(true);
-  const [variant, setVariant] = useState<AllVariant>(readVariant);
   // Links between the calendar and the patient card: the visit to open, the card to open.
   const [focusVisit, setFocusVisit] = useState<number | null>(null);
   const [openPatient, setOpenPatient] = useState<number | null>(null);
@@ -147,15 +135,6 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
     onLogout();
   };
 
-  const chooseVariant = (next: AllVariant) => {
-    setVariant(next);
-    try {
-      localStorage.setItem(ALL_VARIANT_KEY, next);
-    } catch {
-      /* private mode */
-    }
-  };
-
   const openVisit = (siteId: string, day: string, appointmentId: number) => {
     // Stay on "Wszystkie" when it is on: the visit is there too.
     if (!all) chooseSite(siteId);
@@ -189,16 +168,8 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const hours = useMemo(() => workHours(date, day.schedules), [date, day.schedules]);
   const selected = useMemo(() => selectedIds(siteStaff, choice, working), [siteStaff, choice, working]);
   const columns = useMemo(
-    () =>
-      calendarColumns(
-        sites,
-        siteStaff.filter((s) => selected.has(s.id)),
-        date,
-        day.schedules,
-        day.appointments,
-        all && variant === "columns",
-      ),
-    [sites, siteStaff, selected, date, day.schedules, day.appointments, all, variant],
+    () => calendarColumns(siteStaff.filter((s) => selected.has(s.id))),
+    [siteStaff, selected],
   );
   const liveVisits = day.appointments.filter((a) => a.status !== "cancelled");
   const visitCount = liveVisits.filter((a) => selected.has(a.staffId)).length;
@@ -345,28 +316,6 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
                 );
               })}
             </div>
-            {all && (
-              <div
-                className="flex items-center gap-1 text-xs text-muted-foreground"
-                role="radiogroup"
-                aria-label="Jak odróżnić kliniki"
-              >
-                <span className="max-sm:hidden">Widok:</span>
-                <div className="flex overflow-hidden rounded-md border border-input">
-                  {ALL_VARIANTS.map((v) => (
-                    <button
-                      key={v.id}
-                      role="radio"
-                      aria-checked={v.id === variant}
-                      onClick={() => chooseVariant(v.id)}
-                      className={`px-2 py-1 pointer-coarse:py-2 ${v.id === variant ? "bg-muted font-medium text-foreground" : "bg-surface hover:bg-muted"}`}
-                    >
-                      {v.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </header>
         )}
         {error && <p className="px-4 py-2 text-sm text-destructive">{error}</p>}
@@ -406,7 +355,6 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               key={`${site}-${date}-${focusVisit ?? ""}`}
               site={site}
               sites={sites}
-              variant={variant}
               initialSelected={focusVisit}
               onOpenPatient={openPatientCard}
               onOpenVisit={openVisit}
