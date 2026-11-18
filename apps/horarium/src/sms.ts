@@ -115,8 +115,8 @@ export function createTg200Sender(config: Tg200Config): SendSms {
             stage = "send";
             socket.write(`Action: smscommand\r\ncommand: ${smsCommand(config.span, to, text, id)}\r\n\r\n`);
             stage = "report";
-          } else if (stage === "report" && b.Event === "UpdateSMS" && (b.ID === id || b.Id === id)) {
-            // Status 1 is a successful send; anything else is a failure reported by the network.
+          } else if (stage === "report" && (b.Event === "UpdateSMSSend" || b.Event === "UpdateSMS") && (b.ID === id || b.Id === id)) {
+            // The TG200 names it UpdateSMSSend (older firmware: UpdateSMS). Status 1 is a successful send; anything else is a failure reported by the network.
             return finish(b.Status === "1" ? { sent: true } : { sent: false, reason: `bramka SMS zgłosiła błąd (status ${b.Status ?? "?"})` });
           } else if (stage === "report" && b.Response === "Error") {
             return finish({ sent: false, reason: `bramka SMS odrzuciła wiadomość${b.Message ? `: ${b.Message}` : ""}` });

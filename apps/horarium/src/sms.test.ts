@@ -41,7 +41,7 @@ async function fakeGateway(status: string) {
       const id = chunk.match(/gsm send sms \d+ \S+ ".*" (\d+)/)?.[1];
       if (id) {
         socket.write("Response: Follows\r\nPrivilege: Command\r\n--END COMMAND--\r\n\r\n");
-        socket.write(`Event: UpdateSMS\r\nPrivilege: all,smscommand\r\nID: ${id}\r\nSmsc: +48000\r\nStatus: ${status}\r\n\r\n`);
+        socket.write(`Event: UpdateSMSSend\r\nPrivilege: all,smscommand\r\nID: ${id}\r\nSmsc: +48000\r\nStatus: ${status}\r\n--END SMS EVENT--\r\n\r\n`);
       }
     });
   });
