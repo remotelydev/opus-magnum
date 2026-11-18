@@ -14,6 +14,8 @@ interface Props {
   appointment: Appointment;
   from: MovePlace;
   to: MovePlace;
+  /** New length in minutes, when the change sets one; otherwise the visit keeps its length. */
+  length?: number;
   busy: boolean;
   error: string | null;
   onConfirm: (notifyPatient: boolean) => void;
@@ -21,12 +23,12 @@ interface Props {
 }
 
 /** Asked after a visit is dropped somewhere new, so a slip of the mouse does not move a patient. */
-export function MoveDialog({ appointment: a, from, to, busy, error, onConfirm, onCancel }: Props) {
+export function MoveDialog({ appointment: a, from, to, length: newLength, busy, error, onConfirm, onCancel }: Props) {
   // Off by default: reception ticks it when the patient should hear about the change.
   const [notify, setNotify] = useState(false);
   const length = (new Date(a.endsAt).getTime() - new Date(a.startsAt).getTime()) / 60_000;
-  const place = (p: MovePlace) =>
-    `${formatMinutes(p.startMin)}–${formatMinutes(p.startMin + length)} · ${p.staffName} · ${p.siteName}`;
+  const place = (p: MovePlace, minutes = length) =>
+    `${formatMinutes(p.startMin)}–${formatMinutes(p.startMin + minutes)} · ${p.staffName} · ${p.siteName}`;
   const day = toClinicTime(a.startsAt).date;
 
   return (
@@ -40,7 +42,7 @@ export function MoveDialog({ appointment: a, from, to, busy, error, onConfirm, o
           <dt className="text-muted-foreground">Było</dt>
           <dd>{place(from)}</dd>
           <dt className="text-muted-foreground">Będzie</dt>
-          <dd className="font-medium">{place(to)}</dd>
+          <dd className="font-medium">{place(to, newLength ?? length)}</dd>
         </dl>
         {a.patientId && (
           <label className="flex items-center gap-2">

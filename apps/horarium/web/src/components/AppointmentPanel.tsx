@@ -11,7 +11,9 @@ import {
   type Staff,
 } from "../lib/api.ts";
 import { siteName } from "../lib/sites.ts";
+import { MoveDialog } from "./MoveDialog.tsx";
 import { PatientHistory } from "./PatientHistory.tsx";
+import { VisitHistory } from "./VisitHistory.tsx";
 import { formatMinutes, fromClinicTime, parseHhmm, toClinicTime } from "../lib/time.ts";
 
 interface Props {
@@ -50,6 +52,8 @@ export function AppointmentPanel({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // A new time waits for confirmation, as a drag does.
+  const [pendingTime, setPendingTime] = useState<{ startsAt: Date; endsAt: Date; minutes: number } | null>(null);
 
   useEffect(() => {
     // Over the calendar on phones and tablets, so Escape closes it like a dialog.
@@ -62,14 +66,19 @@ export function AppointmentPanel({
     if (a.patientId) api.patient(a.patientId).then(setPatient).catch(() => setPatient(null));
   }, [a.patientId]);
 
-  const run = async (body: Parameters<typeof api.updateAppointment>[1], done: string) => {
+  const run = async (body: Parameters<typeof api.updateAppointment>[1], done: string): Promise<boolean> => {
     setBusy(true);
     setError(null);
     try {
       const res = await api.updateAppointment(a.id, body);
-      onChanged(res.warnings.length ? `${done} Uwaga: ${res.warnings.join(" ")}` : done);
+      const parts = [done];
+      if (res.sms) parts.push(res.sms);
+      if (res.warnings.length) parts.push(`Uwaga: ${res.warnings.join(" ")}`);
+      onChanged(parts.join(" "));
+      return true;
     } catch (err) {
       setError((err as Error).message);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -79,13 +88,22 @@ export function AppointmentPanel({
     const minutes = parseHhmm(time);
     if (minutes === null || length < 5) return setError("Godzina w formacie GG:MM i czas co najmniej 5 min.");
     const startsAt = fromClinicTime(start.date, minutes);
-    run(
-      { startsAt: startsAt.toISOString(), endsAt: new Date(startsAt.getTime() + length * 60_000).toISOString() },
-      "Zmieniono godzinę.",
-    );
+    setPendingTime({ startsAt, endsAt: new Date(startsAt.getTime() + length * 60_000), minutes });
   };
 
-  const history = patient?.appointments.filter((x) => x.id !== a.id).slice(0, 5) ?? [];
+  const confirmTime = async (notifyPatient: boolean) => {
+    if (!pendingTime) return;
+    const ok = await run(
+      {
+        startsAt: pendingTime.startsAt.toISOString(),
+        endsAt: pendingTime.endsAt.toISOString(),
+        ...(notifyPatient ? { notifyPatient: true } : {}),
+      },
+      "Zmieniono godzinę.",
+    );
+    if (ok) setPendingTime(null);
+  };
+
   const doctor = staff.find((s) => s.id === a.staffId)?.name ?? "";
 
   return (
@@ -192,29 +210,22 @@ export function AppointmentPanel({
         </p>
       )}
 
-      {history.length > 0 && (
+      {patient && (
         <section>
-          <h3 className="mb-1 text-xs font-medium text-muted-foreground">Inne wizyty pacjenta</h3>
-          <ul className="space-y-0.5 text-xs">
-            {history.map((h) => {
-              const label = `${toClinicTime(h.startsAt).date} · ${h.serviceName ?? h.title ?? "wizyta"} · ${siteName(sites, h.siteId)} · ${STATUS_LABEL[h.status]}`;
-              return (
-                <li key={h.id}>
-                  {onOpenVisit ? (
-                    <button
-                      className="text-left underline-offset-2 hover:underline"
-                      title="Pokaż tę wizytę w terminarzu"
-                      onClick={() => onOpenVisit(h.siteId, toClinicTime(h.startsAt).date, h.id)}
-                    >
-                      {label}
-                    </button>
-                  ) : (
-                    label
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          <h3 className="mb-1 text-xs font-medium text-muted-foreground">Poprzednie wizyty pacjenta</h3>
+          <VisitHistory
+            visits={patient.appointments.filter((x) => x.id !== a.id && x.startsAt < a.startsAt)}
+            staff={staff}
+            sites={sites}
+            limit={10}
+            compact
+            onOpenVisit={onOpenVisit}
+          />
+          {onOpenPatient && (
+            <Button size="sm" variant="link" className="px-0" onClick={() => onOpenPatient(patient.id)}>
+              Wszystkie wizyty w karcie pacjenta →
+            </Button>
+          )}
         </section>
       )}
 
@@ -223,6 +234,18 @@ export function AppointmentPanel({
           <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Historia zmian</summary>
           <div className="mt-2">{historyOpen && <PatientHistory patientId={a.patientId} />}</div>
         </details>
+      )}
+      {pendingTime && (
+        <MoveDialog
+          appointment={a}
+          from={{ startMin: start.minutes, staffName: doctor, siteName: siteName(sites, a.siteId) }}
+          to={{ startMin: pendingTime.minutes, staffName: doctor, siteName: siteName(sites, a.siteId) }}
+          length={length}
+          busy={busy}
+          error={error}
+          onConfirm={confirmTime}
+          onCancel={() => setPendingTime(null)}
+        />
       )}
     </aside>
   );

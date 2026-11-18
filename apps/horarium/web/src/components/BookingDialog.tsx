@@ -2,7 +2,8 @@ import { Button } from "@opus-magnum/dentaplus-ui/components/button";
 import { Input, Label, Select } from "@opus-magnum/dentaplus-ui/components/field";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { api, type Patient, type PatientSummary, type Service, type Site, type Staff } from "../lib/api.ts";
-import { formatMinutes, fromClinicTime, parseHhmm } from "../lib/time.ts";
+import { ALL_SITES } from "../lib/sites.ts";
+import { addDays, formatMinutes, fromClinicTime, parseHhmm, toClinicTime } from "../lib/time.ts";
 import { Modal } from "@opus-magnum/dentaplus-ui/components/modal";
 
 interface Props {
@@ -13,17 +14,58 @@ interface Props {
   staff: Staff[];
   services: Service[];
   initial: { staffId: number; startMin: number };
+  /** Booking from the patient card: the patient is known and the day is chosen in the dialog. */
+  initialPatient?: Patient | null;
+  pickDate?: boolean;
   onClose: () => void;
   onBooked: (message: string) => void;
 }
 
 const CUSTOM = "custom";
 
-export function BookingDialog({ siteId, sites, date, staff, services, initial, onClose, onBooked }: Props) {
-  // With both clinics on screen the clinic starts empty and must be chosen before booking.
+export function BookingDialog({
+  siteId,
+  sites,
+  date: initialDate,
+  staff,
+  services,
+  initial,
+  initialPatient = null,
+  pickDate = false,
+  onClose,
+  onBooked,
+}: Props) {
+  // With both clinics on screen the clinic must be set before booking. It is filled in from where
+  // the doctor works that day (one clinic a day), and reception can change it.
   const pickSite = siteId === null;
   const [site, setSite] = useState(siteId ?? "");
+  const [siteTouched, setSiteTouched] = useState(false);
+  const [date, setDate] = useState(initialDate);
   const [staffId, setStaffId] = useState(initial.staffId);
+  const [daySites, setDaySites] = useState<Map<number, string>>(new Map());
+
+  useEffect(() => {
+    if (!pickSite || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+    let current = true;
+    const from = fromClinicTime(date, 0).toISOString();
+    const to = fromClinicTime(addDays(date, 1), 0).toISOString();
+    api
+      .schedules(ALL_SITES, from, to)
+      .then((blocks) => {
+        if (!current) return;
+        const map = new Map<number, string>();
+        for (const b of blocks) if (b.kind === "work" && toClinicTime(b.startsAt).date === date) map.set(b.staffId, b.siteId);
+        setDaySites(map);
+      })
+      .catch(() => current && setDaySites(new Map()));
+    return () => {
+      current = false;
+    };
+  }, [pickSite, date]);
+
+  useEffect(() => {
+    if (pickSite && !siteTouched) setSite(daySites.get(staffId) ?? "");
+  }, [pickSite, siteTouched, daySites, staffId]);
   // Only people working at the chosen clinic, plus whoever is already picked, so the choice never vanishes.
   const staffOptions = site ? staff.filter((s) => s.sites.includes(site) || s.id === staffId) : staff;
   const [start, setStart] = useState(formatMinutes(initial.startMin));
@@ -31,7 +73,7 @@ export function BookingDialog({ siteId, sites, date, staff, services, initial, o
   const [customTitle, setCustomTitle] = useState("");
   const [customMinutes, setCustomMinutes] = useState(30);
   const [notes, setNotes] = useState("");
-  const [patient, setPatient] = useState<Patient | null>(null);
+  const [patient, setPatient] = useState<Patient | null>(initialPatient);
   const [creatingPatient, setCreatingPatient] = useState(false);
   const [newPatient, setNewPatient] = useState({ firstName: "", lastName: "", phone: "", smsConsent: true });
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +90,7 @@ export function BookingDialog({ siteId, sites, date, staff, services, initial, o
     setError(null);
     const startMin = parseHhmm(start);
     if (startMin === null) return setError("Godzina w formacie GG:MM, np. 9:15.");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return setError("Wybierz dzień.");
     if (!site) return setError("Wybierz klinikę.");
     setBusy(true);
     try {
@@ -134,7 +177,15 @@ export function BookingDialog({ siteId, sites, date, staff, services, initial, o
         {pickSite && (
           <div className="space-y-1">
             <Label htmlFor="b-site">Klinika</Label>
-            <Select id="b-site" value={site} onChange={(e) => setSite(e.target.value)} required>
+            <Select
+              id="b-site"
+              value={site}
+              onChange={(e) => {
+                setSite(e.target.value);
+                setSiteTouched(true);
+              }}
+              required
+            >
               <option value="" disabled>
                 Wybierz klinikę…
               </option>
@@ -144,6 +195,12 @@ export function BookingDialog({ siteId, sites, date, staff, services, initial, o
                 </option>
               ))}
             </Select>
+          </div>
+        )}
+        {pickDate && (
+          <div className="space-y-1">
+            <Label htmlFor="b-date">Dzień</Label>
+            <Input id="b-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
           </div>
         )}
         <div className="grid grid-cols-2 gap-3">

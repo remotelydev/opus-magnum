@@ -5,7 +5,7 @@ import { audit, type Db } from "./db.js";
 import { createLoginLimiter, type LoginLimiter } from "./login-limit.js";
 import { normalizePhone } from "./phone.js";
 import { registerServices } from "./services.js";
-import { registerSettings } from "./settings.js";
+import { CLINIC_TZ, registerSettings } from "./settings.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -465,6 +465,22 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     async (req, reply) => {
       const b = req.body;
       if (new Date(b.endsAt) <= new Date(b.startsAt)) return reply.code(400).send({ error: "Koniec przed początkiem." });
+      // A person works at one clinic a day: hours at the other clinic on the same day are refused.
+      if ((b.kind ?? "work") === "work") {
+        const other = await db.query<{ name: string }>(
+          `SELECT si.name FROM schedules sc
+             JOIN staff st ON st.id = sc.staff_id AND st.kind = 'person'
+             JOIN sites si ON si.id = sc.site_id
+            WHERE sc.staff_id = $1 AND sc.kind = 'work' AND sc.site_id <> $2
+              AND (sc.starts_at AT TIME ZONE '${CLINIC_TZ}')::date <= ($4::timestamptz AT TIME ZONE '${CLINIC_TZ}')::date
+              AND (sc.ends_at AT TIME ZONE '${CLINIC_TZ}')::date >= ($3::timestamptz AT TIME ZONE '${CLINIC_TZ}')::date
+            LIMIT 1`,
+          [b.staffId, b.siteId, b.startsAt, b.endsAt],
+        );
+        if (other.rows[0]) {
+          return reply.code(409).send({ error: `Tego dnia ta osoba pracuje już w klinice ${other.rows[0].name}.` });
+        }
+      }
       const { rows } = await db.query<{ id: number }>(
         "INSERT INTO schedules (staff_id, site_id, starts_at, ends_at, kind) VALUES ($1, $2, $3, $4, $5) RETURNING id",
         [b.staffId, b.siteId, b.startsAt, b.endsAt, b.kind ?? "work"],

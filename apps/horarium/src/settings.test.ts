@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { buildApp } from "./app.js";
 import { createUser } from "./auth.js";
 import type { Db } from "./db.js";
-import { overlappingDay } from "./settings.js";
+import { overlappingDay, twoSitesOneDay } from "./settings.js";
 import { freshDb, TEST_DATABASE_URL } from "./test-db.js";
 
 const PASSWORD = "correct-horse-battery";
@@ -24,6 +24,24 @@ test("overlappingDay finds two ranges that clash on one weekday", () => {
       { weekday: 3, siteId: "poddebice", starts: "12:00", ends: "18:00" },
     ]),
     3,
+  );
+});
+
+test("twoSitesOneDay: one clinic a day, different clinics on different days", () => {
+  assert.equal(
+    twoSitesOneDay([
+      { weekday: 1, siteId: "turek" },
+      { weekday: 1, siteId: "turek" },
+      { weekday: 2, siteId: "poddebice" },
+    ]),
+    null,
+  );
+  assert.equal(
+    twoSitesOneDay([
+      { weekday: 4, siteId: "turek" },
+      { weekday: 4, siteId: "poddebice" },
+    ]),
+    4,
   );
 });
 
@@ -150,10 +168,19 @@ describe("settings API", { skip: TEST_DATABASE_URL ? false : "TEST_DATABASE_URL 
       ).status,
       400,
     );
+    // Turek in the morning and Poddębice in the afternoon of one day: refused, one clinic a day.
+    const split = await call("PUT", `/api/staff/${id}/pattern`, "recepcja", {
+      days: [
+        { weekday: 1, siteId: "turek", starts: "08:00", ends: "12:00" },
+        { weekday: 1, siteId: "poddebice", starts: "13:00", ends: "18:00" },
+      ],
+    });
+    assert.equal(split.status, 400);
+    assert.match(split.body.error, /jednej klinice/);
     const days = [
       { weekday: 1, siteId: "turek", starts: "08:00", ends: "12:00" },
-      { weekday: 1, siteId: "poddebice", starts: "13:00", ends: "18:00" },
       { weekday: 2, siteId: "turek", starts: "09:00", ends: "17:00" },
+      { weekday: 3, siteId: "poddebice", starts: "13:00", ends: "18:00" },
     ];
     assert.equal((await call("PUT", `/api/staff/${id}/pattern`, "lekarz", { days })).status, 403);
     assert.equal((await call("PUT", `/api/staff/${id}/pattern`, "recepcja", { days })).status, 200);
@@ -182,7 +209,6 @@ describe("settings API", { skip: TEST_DATABASE_URL ? false : "TEST_DATABASE_URL 
       [
         ["absence", "turek", "2030-12-15T23:00:00.000Z"],
         ["work", "turek", "2030-12-16T07:00:00.000Z"],
-        ["work", "poddebice", "2030-12-16T12:00:00.000Z"],
         ["work", "turek", "2030-12-17T08:00:00.000Z"],
       ],
     );
@@ -192,6 +218,23 @@ describe("settings API", { skip: TEST_DATABASE_URL ? false : "TEST_DATABASE_URL 
     const piotr = pub.staff.find((s: { id: number }) => s.id === id);
     assert.equal(piotr.phone, undefined);
     assert.deepEqual(piotr.hours, [{ date: "2030-12-17", siteId: "turek", from: "09:00", to: "17:00" }]);
+
+    // Extra hours added by hand at the other clinic on a day already worked in Turek: refused.
+    const clash = await call("POST", "/api/schedules", "recepcja", {
+      staffId: id,
+      siteId: "poddebice",
+      startsAt: "2030-12-16T13:00:00.000Z",
+      endsAt: "2030-12-16T16:00:00.000Z",
+    });
+    assert.equal(clash.status, 409);
+    assert.match(clash.body.error, /Turek/);
+    const sameSite = await call("POST", "/api/schedules", "recepcja", {
+      staffId: id,
+      siteId: "turek",
+      startsAt: "2030-12-16T13:00:00.000Z",
+      endsAt: "2030-12-16T16:00:00.000Z",
+    });
+    assert.equal(sameSite.status, 201);
 
     assert.equal(
       (await call("POST", `/api/staff/${id}/schedule/generate`, "recepcja", { from: "2030-12-16", to: "2030-12-01" })).status,

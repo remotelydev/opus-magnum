@@ -2,15 +2,21 @@ import { Button } from "@opus-magnum/dentaplus-ui/components/button";
 import { StatusBadge } from "@opus-magnum/dentaplus-ui/components/status";
 import { Input, Label } from "@opus-magnum/dentaplus-ui/components/field";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { api, type Appointment, type Patient, type PatientPage, type Site, type Staff } from "../lib/api.ts";
-import { formatMinutes, toClinicTime } from "../lib/time.ts";
+import { api, type Appointment, type Patient, type PatientPage, type Service, type Site, type Staff } from "../lib/api.ts";
+import { ALL_SITES } from "../lib/sites.ts";
+import { todayInClinic } from "../lib/time.ts";
+import { BookingDialog } from "./BookingDialog.tsx";
 import { PatientHistory } from "./PatientHistory.tsx";
+import { VisitHistory } from "./VisitHistory.tsx";
 
 type PatientCard = Patient & { appointments: Appointment[] };
 
 interface Props {
   sites: Site[];
   staff: Staff[];
+  services: Service[];
+  /** The clinic picked in the calendar (or ALL_SITES): "Umów wizytę" books there, or asks when both. */
+  site: string;
   canEdit: boolean;
   canSeeHistory: boolean;
   /** Jump to the calendar on the day and site of a visit, with that visit open. */
@@ -24,7 +30,16 @@ const formatDate = (iso: string) => dateFmt.format(new Date(`${iso.slice(0, 10)}
 
 const PAGE_SIZE = 25;
 
-export function PatientsPage({ sites, staff, canEdit, canSeeHistory, onOpenDay, initialPatient = null }: Props) {
+export function PatientsPage({
+  sites,
+  staff,
+  services,
+  site,
+  canEdit,
+  canSeeHistory,
+  onOpenDay,
+  initialPatient = null,
+}: Props) {
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -81,6 +96,8 @@ export function PatientsPage({ sites, staff, canEdit, canSeeHistory, onOpenDay, 
             id={selected}
             sites={sites}
             staff={staff}
+            services={services}
+            site={site}
             canEdit={canEdit}
             canSeeHistory={canSeeHistory}
             onOpenDay={onOpenDay}
@@ -196,6 +213,8 @@ function PatientCardView({
   id,
   sites,
   staff,
+  services,
+  site,
   canEdit,
   canSeeHistory,
   onOpenDay,
@@ -210,6 +229,8 @@ function PatientCardView({
   const [error, setError] = useState<string | null>(null);
   const [historyKey, setHistoryKey] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [booking, setBooking] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api
@@ -240,34 +261,10 @@ function PatientCardView({
   const now = Date.now();
   const upcoming = card.appointments.filter((a) => new Date(a.startsAt).getTime() >= now).reverse();
   const past = card.appointments.filter((a) => new Date(a.startsAt).getTime() < now);
-  const doctor = (staffId: number) => staff.find((s) => s.id === staffId)?.name ?? "?";
-  const siteName = (siteId: string) => sites.find((s) => s.id === siteId)?.name ?? siteId;
-
+  const all = site === ALL_SITES;
+  const bookable = staff.filter((s) => s.active && (all || s.sites.includes(site)));
   const visitList = (list: Appointment[]) => (
-    <ul className="divide-y divide-border rounded-md border border-border text-sm">
-      {list.map((a) => {
-        const t = toClinicTime(a.startsAt);
-        return (
-          <li key={a.id}>
-            <button
-              className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-left hover:bg-muted"
-              onClick={() => onOpenDay(a.siteId, t.date, a.id)}
-              title="Pokaż tę wizytę w terminarzu"
-            >
-              <span className="tabular-nums sm:w-40">
-                {formatDate(t.date)}, {formatMinutes(t.minutes)}
-              </span>
-              <span className="min-w-0 flex-1 font-medium sm:min-w-40 sm:font-normal">{a.serviceName ?? a.title ?? "Wizyta"}</span>
-              <span className="text-muted-foreground">
-                {doctor(a.staffId)} · {siteName(a.siteId)}
-              </span>
-              <StatusBadge status={a.status} />
-              {a.notes && <span className="basis-full text-xs text-muted-foreground">{a.notes}</span>}
-            </button>
-          </li>
-        );
-      })}
-    </ul>
+    <VisitHistory visits={list} staff={staff} sites={sites} onOpenVisit={onOpenDay} />
   );
 
   return (
@@ -287,11 +284,41 @@ function PatientCardView({
           {card.notes && <p className="text-muted-foreground">{card.notes}</p>}
         </div>
         {canEdit && (
-          <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
-            Edytuj dane
-          </Button>
+          <div className="flex gap-2">
+            {bookable.length > 0 && (
+              <Button size="sm" onClick={() => setBooking(true)}>
+                Umów wizytę
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+              Edytuj dane
+            </Button>
+          </div>
         )}
       </section>
+      {notice && (
+        <button className="text-sm underline-offset-2 hover:underline" onClick={() => setNotice(null)}>
+          {notice} ✕
+        </button>
+      )}
+      {booking && (
+        <BookingDialog
+          siteId={all ? null : site}
+          sites={sites}
+          date={todayInClinic()}
+          pickDate
+          staff={bookable}
+          services={services}
+          initial={{ staffId: bookable[0]!.id, startMin: 8 * 60 }}
+          initialPatient={card}
+          onClose={() => setBooking(false)}
+          onBooked={(message) => {
+            setBooking(false);
+            setNotice(message);
+            load();
+          }}
+        />
+      )}
 
       <section className="space-y-2">
         <h2 className="text-sm font-medium">Nadchodzące wizyty</h2>

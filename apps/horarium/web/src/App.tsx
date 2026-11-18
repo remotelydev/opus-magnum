@@ -381,6 +381,8 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
             key={openPatient ?? "list"}
             initialPatient={openPatient}
             sites={sites}
+            services={services}
+            site={site}
             staff={staff}
             canEdit={user.role !== "doctor"}
             canSeeHistory={user.role === "admin"}
