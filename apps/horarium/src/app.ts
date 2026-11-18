@@ -22,6 +22,8 @@ const PG_EXCLUSION_VIOLATION = "23P01";
 const PG_UNIQUE_VIOLATION = "23505";
 const PG_FK_VIOLATION = "23503";
 const MAX_RANGE_DAYS = 42;
+/** `site=all` in the calendar's reads: both clinics at once ("Wszystkie" in the site switcher). */
+const ALL_SITES = "all";
 
 const isoDateTime = { type: "string", format: "date-time" } as const;
 
@@ -427,7 +429,8 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     },
     async (req) => {
       const { rows } = await db.query(
-        "SELECT * FROM schedules WHERE site_id = $1 AND starts_at < $3 AND ends_at > $2 ORDER BY starts_at",
+        `SELECT * FROM schedules WHERE ($1 = '${ALL_SITES}' OR site_id = $1) AND starts_at < $3 AND ends_at > $2
+          ORDER BY starts_at`,
         [req.query.site, req.query.from, req.query.to],
       );
       return rows.map((r) => ({
@@ -502,7 +505,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
       }
       const { rows } = await db.query(
         `${APPOINTMENT_SELECT}
-          WHERE a.site_id = $1 AND a.starts_at < $3 AND a.ends_at > $2 AND ($4::int IS NULL OR a.staff_id = $4)
+          WHERE ($1 = '${ALL_SITES}' OR a.site_id = $1) AND a.starts_at < $3 AND a.ends_at > $2 AND ($4::int IS NULL OR a.staff_id = $4)
           ORDER BY a.starts_at`,
         [site, from, to, staffId ?? null],
       );
@@ -607,7 +610,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
 
   app.patch<{
     Params: { id: number };
-    Body: Partial<{ staffId: number; siteId: string; startsAt: string; endsAt: string; status: string; notes: string | null; serviceId: number | null; title: string | null }>;
+    Body: Partial<{ staffId: number; siteId: string; startsAt: string; endsAt: string; status: string; notes: string | null; serviceId: number | null; title: string | null; notifyPatient: boolean }>;
   }>(
     "/api/appointments/:id",
     {
@@ -626,6 +629,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
             notes: { type: ["string", "null"] },
             serviceId: { type: ["integer", "null"] },
             title: { type: ["string", "null"] },
+            notifyPatient: { type: "boolean" },
           },
         },
       },
@@ -633,7 +637,8 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     async (req, reply) => {
       const current = (await db.query("SELECT * FROM appointments WHERE id = $1", [req.params.id])).rows[0];
       if (!current) return reply.code(404).send({ error: "Nie ma takiej wizyty." });
-      const b = req.body;
+      const { notifyPatient, ...b } = req.body;
+      if (notifyPatient !== undefined && !Object.keys(b).length) noFields();
       const next = {
         staffId: b.staffId ?? current.staff_id,
         siteId: b.siteId ?? current.site_id,
@@ -662,7 +667,9 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
         status: b.status,
         startsAt: b.startsAt ? next.startsAt : undefined,
       });
-      return { ok: true, endsAt: next.endsAt, warnings };
+      // Texting the patient is not wired up yet: say so plainly instead of pretending it went out.
+      const sms = notifyPatient ? "SMS nie został wysłany: wysyłka SMS z terminarza nie jest jeszcze podłączona." : undefined;
+      return { ok: true, endsAt: next.endsAt, warnings, ...(sms ? { sms } : {}) };
     },
   );
 

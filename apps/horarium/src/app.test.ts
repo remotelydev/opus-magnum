@@ -238,6 +238,27 @@ describe("horarium API", { skip: TEST_DATABASE_URL ? false : "TEST_DATABASE_URL 
     assert.equal(day.body.length, 3);
     assert.equal(day.body.find((a: { id: number }) => a.id === reuse.body.id).patientName, "Jan Testowy");
 
+    // "Wszystkie": both clinics in one read; the visit at Turek is among them.
+    const both = await call(
+      "GET",
+      "/api/appointments?site=all&from=2026-12-01T00:00:00Z&to=2026-12-02T00:00:00Z",
+      "dr.kowalska",
+    );
+    assert.equal(both.status, 200);
+    assert.ok(both.body.length >= day.body.length);
+    assert.ok(both.body.some((a: { id: number }) => a.id === reuse.body.id));
+    assert.equal((await call("GET", "/api/schedules?site=all&from=2026-12-01T00:00:00Z&to=2026-12-02T00:00:00Z", "dr.kowalska")).status, 200);
+
+    // A confirmed move may ask to text the patient; until SMS is wired up the answer says it was not sent.
+    const notified = await call("PATCH", `/api/appointments/${reuse.body.id}`, "recepcja.turek", {
+      startsAt: "2026-12-01T10:30:00Z",
+      notifyPatient: true,
+    });
+    assert.equal(notified.status, 200);
+    assert.match(notified.body.sms, /nie został wysłany/);
+    const quiet = await call("PATCH", `/api/appointments/${reuse.body.id}`, "recepcja.turek", { startsAt: "2026-12-01T10:00:00Z" });
+    assert.equal(quiet.body.sms, undefined);
+
     const card = await call("GET", `/api/patients/${patientId}`, "dr.kowalska");
     assert.equal(card.body.appointments.length, 2);
     assert.deepEqual(card.body.medicalFlags, ["cukrzyca"]);

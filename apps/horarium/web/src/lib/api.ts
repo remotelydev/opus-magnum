@@ -195,8 +195,17 @@ export const api = {
   }) => request<{ id: number; endsAt: string; warnings: string[] }>("POST", "/api/appointments", body),
   updateAppointment: (
     id: number,
-    body: Partial<{ staffId: number; startsAt: string; endsAt: string; status: AppointmentStatus; notes: string | null }>,
-  ) => request<{ ok: true; endsAt: string; warnings: string[] }>("PATCH", `/api/appointments/${id}`, body),
+    body: Partial<{
+      staffId: number;
+      siteId: string;
+      startsAt: string;
+      endsAt: string;
+      status: AppointmentStatus;
+      notes: string | null;
+      /** Ask the server to text the patient the new time (after a confirmed move). */
+      notifyPatient: boolean;
+    }>,
+  ) => request<{ ok: true; endsAt: string; warnings: string[]; sms?: string }>("PATCH", `/api/appointments/${id}`, body),
 };
 
 export { STATUS_LABEL } from "@opus-magnum/dentaplus-ui/components/status";

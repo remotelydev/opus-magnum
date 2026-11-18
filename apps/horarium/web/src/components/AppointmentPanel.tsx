@@ -7,23 +7,40 @@ import {
   type Appointment,
   type AppointmentStatus,
   type Patient,
+  type Site,
   type Staff,
 } from "../lib/api.ts";
+import { siteName } from "../lib/sites.ts";
 import { PatientHistory } from "./PatientHistory.tsx";
 import { formatMinutes, fromClinicTime, parseHhmm, toClinicTime } from "../lib/time.ts";
 
 interface Props {
   appointment: Appointment;
   staff: Staff[];
+  sites: Site[];
   canEdit: boolean;
   canSeeHistory?: boolean;
   onClose: () => void;
   onChanged: (message: string) => void;
+  /** "Karta pacjenta": open the patient's full card. */
+  onOpenPatient?: (patientId: number) => void;
+  /** A visit in "Inne wizyty pacjenta": show it in the calendar. */
+  onOpenVisit?: (siteId: string, date: string, appointmentId: number) => void;
 }
 
 const STATUS_ACTIONS: AppointmentStatus[] = ["confirmed", "done", "no_show", "cancelled", "booked"];
 
-export function AppointmentPanel({ appointment: a, staff, canEdit, canSeeHistory = false, onClose, onChanged }: Props) {
+export function AppointmentPanel({
+  appointment: a,
+  staff,
+  sites,
+  canEdit,
+  canSeeHistory = false,
+  onClose,
+  onChanged,
+  onOpenPatient,
+  onOpenVisit,
+}: Props) {
   const start = toClinicTime(a.startsAt);
   const end = toClinicTime(a.endsAt);
   const [patient, setPatient] = useState<(Patient & { appointments: Appointment[] }) | null>(null);
@@ -81,7 +98,7 @@ export function AppointmentPanel({ appointment: a, staff, canEdit, canSeeHistory
         <div>
           <h2 className="text-base font-medium">{a.patientName ?? a.title ?? "Blokada"}</h2>
           <p className="text-muted-foreground">
-            {formatMinutes(start.minutes)}–{formatMinutes(end.minutes)} · {doctor}
+            {formatMinutes(start.minutes)}–{formatMinutes(end.minutes)} · {doctor} · {siteName(sites, a.siteId)}
           </p>
           <p className="text-muted-foreground">
             {a.serviceName ?? a.title ?? "Usługa spoza cennika"} · {STATUS_LABEL[a.status]}
@@ -107,6 +124,11 @@ export function AppointmentPanel({ appointment: a, staff, canEdit, canSeeHistory
             <p className="text-destructive">Uwaga: {patient.medicalFlags.join(", ")}</p>
           )}
           {patient.notes && <p className="text-muted-foreground">{patient.notes}</p>}
+          {onOpenPatient && (
+            <Button size="sm" variant="link" className="px-0" onClick={() => onOpenPatient(patient.id)}>
+              Karta pacjenta i historia wizyt →
+            </Button>
+          )}
         </section>
       )}
 
@@ -174,11 +196,24 @@ export function AppointmentPanel({ appointment: a, staff, canEdit, canSeeHistory
         <section>
           <h3 className="mb-1 text-xs font-medium text-muted-foreground">Inne wizyty pacjenta</h3>
           <ul className="space-y-0.5 text-xs">
-            {history.map((h) => (
-              <li key={h.id}>
-                {toClinicTime(h.startsAt).date} · {h.serviceName ?? h.title ?? "wizyta"} · {STATUS_LABEL[h.status]}
-              </li>
-            ))}
+            {history.map((h) => {
+              const label = `${toClinicTime(h.startsAt).date} · ${h.serviceName ?? h.title ?? "wizyta"} · ${siteName(sites, h.siteId)} · ${STATUS_LABEL[h.status]}`;
+              return (
+                <li key={h.id}>
+                  {onOpenVisit ? (
+                    <button
+                      className="text-left underline-offset-2 hover:underline"
+                      title="Pokaż tę wizytę w terminarzu"
+                      onClick={() => onOpenVisit(h.siteId, toClinicTime(h.startsAt).date, h.id)}
+                    >
+                      {label}
+                    </button>
+                  ) : (
+                    label
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}

@@ -13,8 +13,10 @@ interface Props {
   staff: Staff[];
   canEdit: boolean;
   canSeeHistory: boolean;
-  /** Jump to the calendar on the day and site of a visit. */
-  onOpenDay: (site: string, date: string) => void;
+  /** Jump to the calendar on the day and site of a visit, with that visit open. */
+  onOpenDay: (site: string, date: string, appointmentId: number) => void;
+  /** Card to open straight away, e.g. from "Karta pacjenta" in the calendar's visit panel. */
+  initialPatient?: number | null;
 }
 
 const dateFmt = new Intl.DateTimeFormat("pl-PL", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" });
@@ -22,13 +24,13 @@ const formatDate = (iso: string) => dateFmt.format(new Date(`${iso.slice(0, 10)}
 
 const PAGE_SIZE = 25;
 
-export function PatientsPage({ sites, staff, canEdit, canSeeHistory, onOpenDay }: Props) {
+export function PatientsPage({ sites, staff, canEdit, canSeeHistory, onOpenDay, initialPatient = null }: Props) {
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<PatientPage | null>(null);
   const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState<number | "new" | null>(null);
+  const [selected, setSelected] = useState<number | "new" | null>(initialPatient);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -198,7 +200,7 @@ function PatientCardView({
   canSeeHistory,
   onOpenDay,
   onChanged,
-}: Omit<Props, "onOpenDay"> & {
+}: Omit<Props, "onOpenDay" | "initialPatient"> & {
   id: number;
   onOpenDay: Props["onOpenDay"];
   onChanged: (name: string) => void;
@@ -249,8 +251,8 @@ function PatientCardView({
           <li key={a.id}>
             <button
               className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-left hover:bg-muted"
-              onClick={() => onOpenDay(a.siteId, t.date)}
-              title="Pokaż ten dzień w terminarzu"
+              onClick={() => onOpenDay(a.siteId, t.date, a.id)}
+              title="Pokaż tę wizytę w terminarzu"
             >
               <span className="tabular-nums sm:w-40">
                 {formatDate(t.date)}, {formatMinutes(t.minutes)}

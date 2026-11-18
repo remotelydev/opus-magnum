@@ -104,15 +104,18 @@ Without `TEST_DATABASE_URL` the API tests are skipped. CI runs them against a Po
 | GET | `/api/patients?q=` (name prefix or phone; no notes or medical flags), `/api/patients/:id` (full card with visits) | any login |
 | GET | `/api/patients/:id/history` (change log of the patient and their visits) | admin |
 | POST / PATCH | `/api/patients`, `/api/patients/:id` | admin, reception |
-| GET | `/api/schedules?site=&from=&to=` | any login |
+| GET | `/api/schedules?site=&from=&to=` (`site=all`: both clinics) | any login |
 | POST / DELETE | `/api/schedules`, `/api/schedules/:id` | admin, reception |
-| GET | `/api/appointments?site=&from=&to=[&staffId=]` (max 42 days) | any login |
+| GET | `/api/appointments?site=&from=&to=[&staffId=]` (max 42 days; `site=all`: both clinics) | any login |
 | POST / PATCH | `/api/appointments`, `/api/appointments/:id` | admin, reception |
 
 Rules built in:
 - One staff member cannot have two live appointments at the same time (database constraint, answers 409). Cancelled and no-show visits free the slot.
 - A visit without an end time takes the service duration. A move keeps the visit length.
 - Booking outside the working hours, at the wrong site or during an absence is allowed but returns `warnings`, as reception sometimes needs it.
+- "Wszystkie" in the calendar's site switcher shows both clinics on one day view, told apart by colour, by a label on each visit, or by a group of columns per clinic (switch under "Widok", remembered per computer). Booking there asks for the clinic; it starts empty and must be chosen.
+- Dropping a visit somewhere new asks first ("Przenieść wizytę?"), with an optional, unticked "Powiadom pacjenta SMS-em". Texting from the calendar is not wired up yet: the answer says the SMS was not sent.
+- The visit panel links to the patient's card, and every visit in the card (and in "Inne wizyty pacjenta") opens that visit in the calendar.
 - Every write goes to `audit_log`, and so does every opening of a patient card (`patient.view`). Patient edits log only the field names, not medical content. Admins see a patient's log under "Historia zmian" in the visit panel.
 - Logins: after 5 failed attempts for one login from one address (or 20 from one address) within 15 minutes, further attempts get 429 until the window passes. Failed attempts are logged as `auth.failed`.
 - Request logs keep only the path, never the query string, so patient searches do not end up in log files.

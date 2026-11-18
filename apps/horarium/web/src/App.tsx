@@ -14,6 +14,7 @@ import { BottomNav, Sidebar, type View } from "./components/Sidebar.tsx";
 import { api, ApiError, type Service, type Site, type Staff, type User } from "./lib/api.ts";
 import { readChoice, saveChoice, selectedIds, workHours, workingIds, type ColumnChoice } from "./lib/columns.ts";
 import { readCollapsed, saveCollapsed } from "./lib/sidebar.ts";
+import { ALL_SITES, ALL_VARIANTS, calendarColumns, type AllVariant } from "./lib/sites.ts";
 import { addDays, formatDay, todayInClinic } from "./lib/time.ts";
 import { useDayData } from "./lib/useDayData.ts";
 import { useMediaQuery } from "./lib/useMediaQuery.ts";
@@ -21,6 +22,17 @@ import { useMediaQuery } from "./lib/useMediaQuery.ts";
 const SITE_KEY = "horarium.site";
 /** Whether the day-and-staff panel is shown beside the calendar on wide screens. */
 const DAY_PANEL_KEY = "horarium.dayPanel";
+/** How "Wszystkie" shows the two clinics (kolor / etykieta / kolumny), remembered on this computer. */
+const ALL_VARIANT_KEY = "horarium.allVariant";
+
+function readVariant(): AllVariant {
+  try {
+    const v = localStorage.getItem(ALL_VARIANT_KEY);
+    return ALL_VARIANTS.some((x) => x.id === v) ? (v as AllVariant) : "color";
+  } catch {
+    return "color";
+  }
+}
 
 function readPanelPinned(): boolean {
   try {
@@ -73,6 +85,11 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const day = useDayData(site, date, view === "calendar");
   const [showCancelled, setShowCancelled] = useState(true);
+  const [variant, setVariant] = useState<AllVariant>(readVariant);
+  // Links between the calendar and the patient card: the visit to open, the card to open.
+  const [focusVisit, setFocusVisit] = useState<number | null>(null);
+  const [openPatient, setOpenPatient] = useState<number | null>(null);
+  const all = site === ALL_SITES;
 
   useEffect(() => {
     if (!menuOpen && !panelOpen) return;
@@ -108,8 +125,15 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
       .catch((e: Error) => setError(e.message));
   }, [view]);
 
+  /** The user moving to another day: a visit opened from the patient card stays behind. */
+  const goTo = (d: string) => {
+    setDate(d);
+    setFocusVisit(null);
+  };
+
   const chooseSite = (id: string) => {
     setSite(id);
+    setFocusVisit(null);
     setChoice(readChoice(id));
     try {
       localStorage.setItem(SITE_KEY, id);
@@ -123,12 +147,38 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
     onLogout();
   };
 
+  const chooseVariant = (next: AllVariant) => {
+    setVariant(next);
+    try {
+      localStorage.setItem(ALL_VARIANT_KEY, next);
+    } catch {
+      /* private mode */
+    }
+  };
+
+  const openVisit = (siteId: string, day: string, appointmentId: number) => {
+    // Stay on "Wszystkie" when it is on: the visit is there too.
+    if (!all) chooseSite(siteId);
+    setDate(day);
+    setFocusVisit(appointmentId);
+    setView("calendar");
+  };
+
+  const openPatientCard = (patientId: number) => {
+    setOpenPatient(patientId);
+    setView("patients");
+  };
+
   const openView = (next: View) => {
     if (next === "schedule") setScheduleStaff(null);
+    if (next === "patients") setOpenPatient(null);
     setView(next);
     setMenuOpen(false);
   };
-  const siteStaff = useMemo(() => staff.filter((s) => s.active && s.sites.includes(site)), [staff, site]);
+  const siteStaff = useMemo(
+    () => staff.filter((s) => s.active && (site === ALL_SITES || s.sites.includes(site))),
+    [staff, site],
+  );
 
   // Until the new day's schedule arrives, keep the previous day's set so the columns do not jump.
   const lastWorking = useRef<Set<number>>(new Set());
@@ -138,7 +188,18 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   }, [day.loaded, day.schedules, day.appointments, date]);
   const hours = useMemo(() => workHours(date, day.schedules), [date, day.schedules]);
   const selected = useMemo(() => selectedIds(siteStaff, choice, working), [siteStaff, choice, working]);
-  const columns = siteStaff.filter((s) => selected.has(s.id));
+  const columns = useMemo(
+    () =>
+      calendarColumns(
+        sites,
+        siteStaff.filter((s) => selected.has(s.id)),
+        date,
+        day.schedules,
+        day.appointments,
+        all && variant === "columns",
+      ),
+    [sites, siteStaff, selected, date, day.schedules, day.appointments, all, variant],
+  );
   const liveVisits = day.appointments.filter((a) => a.status !== "cancelled");
   const visitCount = liveVisits.filter((a) => selected.has(a.staffId)).length;
   const hiddenVisits = liveVisits.length - visitCount;
@@ -163,7 +224,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
     <DayStaffPanel
       date={date}
       onDate={(d) => {
-        setDate(d);
+        goTo(d);
         if (drawer) setPanelOpen(false);
       }}
       staff={siteStaff}
@@ -218,18 +279,18 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
                 variant="outline"
                 size="icon"
                 aria-label="Poprzedni dzień"
-                onClick={() => setDate(addDays(date, -1))}
+                onClick={() => goTo(addDays(date, -1))}
               >
                 <ChevronLeftIcon />
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setDate(todayInClinic())}>
+              <Button variant="outline" size="sm" onClick={() => goTo(todayInClinic())}>
                 Dziś
               </Button>
               <Button
                 variant="outline"
                 size="icon"
                 aria-label="Następny dzień"
-                onClick={() => setDate(addDays(date, 1))}
+                onClick={() => goTo(addDays(date, 1))}
               >
                 <ChevronRightIcon />
               </Button>
@@ -265,7 +326,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               role="tablist"
               aria-label="Placówka"
             >
-              {sites.map((s) => (
+              {[...sites, { id: ALL_SITES, name: "Wszystkie" }].map((s) => (
                 <button
                   key={s.id}
                   role="tab"
@@ -277,6 +338,28 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
                 </button>
               ))}
             </div>
+            {all && (
+              <div
+                className="flex items-center gap-1 text-xs text-muted-foreground"
+                role="radiogroup"
+                aria-label="Jak odróżnić kliniki"
+              >
+                <span className="max-sm:hidden">Widok:</span>
+                <div className="flex overflow-hidden rounded-md border border-input">
+                  {ALL_VARIANTS.map((v) => (
+                    <button
+                      key={v.id}
+                      role="radio"
+                      aria-checked={v.id === variant}
+                      onClick={() => chooseVariant(v.id)}
+                      className={`px-2 py-1 pointer-coarse:py-2 ${v.id === variant ? "bg-muted font-medium text-foreground" : "bg-surface hover:bg-muted"}`}
+                    >
+                      {v.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </header>
         )}
         {error && <p className="px-4 py-2 text-sm text-destructive">{error}</p>}
@@ -295,15 +378,13 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
           <OpeningHoursPage />
         ) : view === "patients" ? (
           <PatientsPage
+            key={openPatient ?? "list"}
+            initialPatient={openPatient}
             sites={sites}
             staff={staff}
             canEdit={user.role !== "doctor"}
             canSeeHistory={user.role === "admin"}
-            onOpenDay={(siteId, day) => {
-              chooseSite(siteId);
-              setDate(day);
-              setView("calendar");
-            }}
+            onOpenDay={openVisit}
           />
         ) : (
           <div className="flex min-h-0 min-w-0 flex-1">
@@ -313,8 +394,13 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               </aside>
             )}
             <DayView
-              key={`${site}-${date}`}
+              key={`${site}-${date}-${focusVisit ?? ""}`}
               site={site}
+              sites={sites}
+              variant={variant}
+              initialSelected={focusVisit}
+              onOpenPatient={openPatientCard}
+              onOpenVisit={openVisit}
               date={date}
               staff={siteStaff}
               columns={columns}

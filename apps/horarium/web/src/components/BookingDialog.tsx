@@ -1,12 +1,14 @@
 import { Button } from "@opus-magnum/dentaplus-ui/components/button";
 import { Input, Label, Select } from "@opus-magnum/dentaplus-ui/components/field";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { api, type Patient, type PatientSummary, type Service, type Staff } from "../lib/api.ts";
+import { api, type Patient, type PatientSummary, type Service, type Site, type Staff } from "../lib/api.ts";
 import { formatMinutes, fromClinicTime, parseHhmm } from "../lib/time.ts";
 import { Modal } from "@opus-magnum/dentaplus-ui/components/modal";
 
 interface Props {
-  site: string;
+  /** The clinic the visit is for; null when the calendar shows both and reception must pick one. */
+  siteId: string | null;
+  sites: Site[];
   date: string;
   staff: Staff[];
   services: Service[];
@@ -17,8 +19,13 @@ interface Props {
 
 const CUSTOM = "custom";
 
-export function BookingDialog({ site, date, staff, services, initial, onClose, onBooked }: Props) {
+export function BookingDialog({ siteId, sites, date, staff, services, initial, onClose, onBooked }: Props) {
+  // With both clinics on screen the clinic starts empty and must be chosen before booking.
+  const pickSite = siteId === null;
+  const [site, setSite] = useState(siteId ?? "");
   const [staffId, setStaffId] = useState(initial.staffId);
+  // Only people working at the chosen clinic, plus whoever is already picked, so the choice never vanishes.
+  const staffOptions = site ? staff.filter((s) => s.sites.includes(site) || s.id === staffId) : staff;
   const [start, setStart] = useState(formatMinutes(initial.startMin));
   const [serviceId, setServiceId] = useState<string>(services[0] ? String(services[0].id) : CUSTOM);
   const [customTitle, setCustomTitle] = useState("");
@@ -41,6 +48,7 @@ export function BookingDialog({ site, date, staff, services, initial, onClose, o
     setError(null);
     const startMin = parseHhmm(start);
     if (startMin === null) return setError("Godzina w formacie GG:MM, np. 9:15.");
+    if (!site) return setError("Wybierz klinikę.");
     setBusy(true);
     try {
       let patientId = patient?.id ?? null;
@@ -69,7 +77,8 @@ export function BookingDialog({ site, date, staff, services, initial, onClose, o
         endsAt: custom ? new Date(startsAt.getTime() + customMinutes * 60_000).toISOString() : undefined,
         notes: notes.trim() || null,
       });
-      onBooked(res.warnings.length ? `Umówiono. Uwaga: ${res.warnings.join(" ")}` : "Umówiono wizytę.");
+      const where = pickSite ? ` (${sites.find((s) => s.id === site)?.name ?? site})` : "";
+      onBooked(res.warnings.length ? `Umówiono${where}. Uwaga: ${res.warnings.join(" ")}` : `Umówiono wizytę${where}.`);
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
@@ -122,6 +131,21 @@ export function BookingDialog({ site, date, staff, services, initial, onClose, o
           </fieldset>
         )}
 
+        {pickSite && (
+          <div className="space-y-1">
+            <Label htmlFor="b-site">Klinika</Label>
+            <Select id="b-site" value={site} onChange={(e) => setSite(e.target.value)} required>
+              <option value="" disabled>
+                Wybierz klinikę…
+              </option>
+              {sites.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label htmlFor="b-staff">Lekarz</Label>
@@ -130,7 +154,7 @@ export function BookingDialog({ site, date, staff, services, initial, onClose, o
               value={staffId}
               onChange={(e) => setStaffId(Number(e.target.value))}
             >
-              {staff.map((s) => (
+              {staffOptions.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
