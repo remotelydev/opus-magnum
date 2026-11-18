@@ -14,7 +14,7 @@ import { BottomNav, Sidebar, type View } from "./components/Sidebar.tsx";
 import { api, ApiError, type Service, type Site, type Staff, type User } from "./lib/api.ts";
 import { readChoice, saveChoice, selectedIds, workHours, workingIds, type ColumnChoice } from "./lib/columns.ts";
 import { readCollapsed, saveCollapsed } from "./lib/sidebar.ts";
-import { ALL_SITES, ALL_VARIANTS, calendarColumns, type AllVariant } from "./lib/sites.ts";
+import { ALL_SITES, ALL_VARIANTS, calendarColumns, siteColor, type AllVariant } from "./lib/sites.ts";
 import { addDays, formatDay, todayInClinic } from "./lib/time.ts";
 import { useDayData } from "./lib/useDayData.ts";
 import { useMediaQuery } from "./lib/useMediaQuery.ts";
@@ -326,17 +326,24 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               role="tablist"
               aria-label="Placówka"
             >
-              {[...sites, { id: ALL_SITES, name: "Wszystkie" }].map((s) => (
-                <button
-                  key={s.id}
-                  role="tab"
-                  aria-selected={s.id === site}
-                  onClick={() => chooseSite(s.id)}
-                  className={`px-3 py-1 text-xs pointer-coarse:py-2 ${s.id === site ? "bg-primary text-primary-foreground" : "bg-surface hover:bg-muted"}`}
-                >
-                  {s.name}
-                </button>
-              ))}
+              {[...sites, { id: ALL_SITES, name: "Wszystkie" }].map((s) => {
+                // Each clinic in its own colour, the same as on the calendar: filled when chosen, a dot otherwise.
+                const color = s.id === ALL_SITES ? null : siteColor(s.id);
+                const on = s.id === site;
+                return (
+                  <button
+                    key={s.id}
+                    role="tab"
+                    aria-selected={on}
+                    onClick={() => chooseSite(s.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1 text-xs pointer-coarse:py-2 ${on ? (color ? "text-white" : "bg-primary text-primary-foreground") : "bg-surface hover:bg-muted"}`}
+                    style={on && color ? { background: color } : undefined}
+                  >
+                    {color && !on && <span className="size-2 rounded-full" style={{ background: color }} aria-hidden="true" />}
+                    {s.name}
+                  </button>
+                );
+              })}
             </div>
             {all && (
               <div

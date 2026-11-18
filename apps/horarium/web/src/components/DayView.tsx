@@ -337,8 +337,8 @@ export function DayView({
                         height: height * PX_PER_MIN - 1,
                         left: `calc(${(lane / lanes) * 100}% + 2px)`,
                         width: `calc(${100 / lanes}% - 4px)`,
-                        // "Kolor": a thin stripe of the clinic's colour on the right edge; the status keeps the left.
-                        ...(mode === "color" ? { boxShadow: `inset -4px 0 0 ${siteColor(a.siteId)}` } : {}),
+                        // "Kolor": the stripe on the left edge in the clinic's colour.
+                        ...(mode === "color" ? { borderLeftColor: siteColor(a.siteId) } : {}),
                       }}
                       title={all ? siteName(sites, a.siteId) : undefined}
                       data-site={a.siteId}
