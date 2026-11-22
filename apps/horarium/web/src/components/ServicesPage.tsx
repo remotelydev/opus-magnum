@@ -56,7 +56,7 @@ export function ServicesPage() {
   const categories = useMemo(() => [...new Set(services.map((s) => s.category))].sort(), [services]);
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto p-3 sm:p-4">
+    <div className="relative min-h-0 flex-1 overflow-auto p-3 sm:p-4">
       <div className="mx-auto max-w-5xl space-y-4">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-lg font-semibold">Usługi i cennik</h1>
