@@ -12,7 +12,7 @@
 //             history but not in the calendar. Optional /<account>/events/<id>/versions (change history).
 //
 // Versum rate-limits an account to roughly 50 requests a minute and answers 429 after that, so this runs
-// one request at a time, 1.3 s apart, and on a 429 waits 1 min, then 2, 4 … up to 15 min.
+// one request at a time, 1.3–2 s apart (random), and on a 429 waits 1 min, then 2, 4 … up to 15 min.
 // Everything is kept raw in IndexedDB ("versum-visits-export") so a stop resumes where it left off.
 // `vx.download()` saves NDJSON files to the Mac's Downloads folder. Patient data never leaves the Mac.
 //
@@ -23,7 +23,7 @@
   const ACCOUNT = location.pathname.split("/")[1];
   const DB_NAME = "versum-visits-export";
   const JSON_HEADERS = { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" };
-  const GAP_MS = 1300;
+  const GAP_MS = 1300; // plus a random 0–700 ms, so requests do not come at a fixed beat
   const CALENDAR_DAYS = 14;
 
   const state = { running: false, phase: "idle", error: null, waitingUntil: null, opts: {}, counters: {} };
@@ -75,7 +75,7 @@
     let wait429 = 60000;
     for (let attempt = 0; ; attempt++) {
       if (!state.running) throw new Error("paused");
-      const gap = lastAt + GAP_MS - Date.now();
+      const gap = lastAt + GAP_MS + Math.random() * 700 - Date.now();
       if (gap > 0) await sleep(gap);
       lastAt = Date.now();
       let r;
