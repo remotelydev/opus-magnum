@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import type { AppConfig, LocationConfig } from "./config.js";
+import type { AppConfig } from "./config.js";
 import {
   DAY_PARTS,
   VISIT_KINDS,
@@ -8,8 +8,15 @@ import {
   type VisitKind,
 } from "./availability.js";
 import { isClosedDate } from "./holidays.js";
-import { hoursSummary, isOpenAt, nextOpenLabel, noticeLine, spokenName } from "./script.js";
-import { TICKET_CATEGORIES, type DevTicketBody } from "./whatsapp.js";
+import {
+  hoursSummary,
+  isOpenAt,
+  nextOpenLabel,
+  noticeLine,
+  toVoiceLocation,
+  type VoiceLocation,
+} from "./script.js";
+import { SLOT_MAX_LENGTH, TICKET_CATEGORIES, type DevTicketBody } from "./whatsapp.js";
 
 export const HOURS_TOOL = "sprawdz_godziny";
 export const TICKET_TOOL = "wyslij_zgloszenie";
@@ -59,13 +66,13 @@ export interface HoursAnswer {
 
 export function hoursAnswer(
   config: AppConfig,
-  location: LocationConfig,
+  location: VoiceLocation,
   now = new Date(),
 ): HoursAnswer {
   const closedDates = location.closedDates ?? [];
   const openNow = isOpenAt(location.hours, now, config.timezone, closedDates);
   return {
-    site: spokenName(location),
+    site: location.name,
     now: warsawTime(now, config.timezone),
     openNow,
     closedToday: isClosedDate(warsawDate(now, config.timezone), closedDates),
@@ -110,19 +117,20 @@ export function agentAvailabilityQuery(
   return { durationMinutes: minutes[kind], kind, part, fromDate, employeeId };
 }
 
-export function agentFirstMessage(location: LocationConfig): string {
+export function agentFirstMessage(location: VoiceLocation): string {
   return noticeLine(location);
 }
 
-export function agentPrompt(config: AppConfig, location: LocationConfig): string {
+export function agentPrompt(config: AppConfig, location: VoiceLocation): string {
   const others = config.locations
     .filter((item) => item.id !== location.id)
-    .map((item) => `- ${spokenName(item)}: ${item.address}, telefon ${item.phone}.`)
+    .map((item) => toVoiceLocation(item))
+    .map((item) => `- ${item.name}: ${item.address}, telefon ${item.phone}.`)
     .join("\n");
-  return `Jesteś asystentem AI recepcji gabinetu stomatologicznego ${spokenName(location)}. Rozmawiasz przez telefon, wyłącznie po polsku, uprzejmie i krótko: jedno lub dwa zdania naraz. Zwracaj się per Pan/Pani.
+  return `Jesteś asystentem AI recepcji gabinetu stomatologicznego ${location.name}. Rozmawiasz przez telefon, wyłącznie po polsku, uprzejmie i krótko: jedno lub dwa zdania naraz. Zwracaj się per Pan/Pani.
 
 # Gabinet
-- ${spokenName(location)}: ${location.address}, telefon ${location.phone}.
+- ${location.name}: ${location.address}, telefon ${location.phone}.
 - Godziny: ${hoursSummary(location.hours)}. W święta państwowe gabinet jest nieczynny.
 ${others ? `\nInne gabinety:\n${others}\n` : ""}
 # Zasady
@@ -133,7 +141,7 @@ ${others ? `\nInne gabinety:\n${others}\n` : ""}
 
 # Zgłoszenie wizyty
 Ustal, czy to zwykła wizyta u dentysty, czy higienizacja (skaling, piaskowanie, czyszczenie zębów). Zapytaj o preferowany dzień i porę dnia (rano, południe, popołudnie), a potem użyj ${AVAILABILITY_TOOL} z kind = "wizyta" albo "higienizacja". Jeśli podajesz "from", najpierw sprawdź dzisiejszą datę narzędziem ${HOURS_TOOL}. Zaproponuj najwyżej dwa najbliższe terminy z odpowiedzi, podając dzień, godzinę i osobę (lekarza albo higienistkę). Jeśli "stale" = true albo lista jest pusta, nie podawaj godzin, tylko zapisz preferowany dzień i porę.
-Potem zbierz po kolei: imię i nazwisko, numer telefonu, czy był(a) już u nas, czy sprawa jest pilna (tak lub nie). Powtórz numer telefonu cyfra po cyfrze i poproś o potwierdzenie. Potem użyj narzędzia ${TICKET_TOOL} z kategorią "book". W polu slot wpisz wybrany termin z lekarzem, np. "wt 27.10 10:30, Anna Nowak", albo preferowany dzień i porę. Przy higienizacji zacznij slot od słowa "higienizacja". Jeśli narzędzie zwróci błąd invalid_slot, skróć pole slot (skrót dnia, bez tytułów) i spróbuj jeszcze raz. Gdy narzędzie odpowie, powiedz, że zgłoszenie zostało przekazane i recepcja potwierdzi termin SMS-em.
+Potem zbierz po kolei: imię i nazwisko, numer telefonu, czy był(a) już u nas, czy sprawa jest pilna (tak lub nie). Powtórz numer telefonu cyfra po cyfrze i poproś o potwierdzenie. Potem użyj narzędzia ${TICKET_TOOL} z kategorią "book". W polu slot wpisz wybrany termin z lekarzem, np. "wt 27.10 10:30, Anna Nowak", albo preferowany dzień i porę. Przy higienizacji zacznij slot od słowa "higienizacja". Pole slot ma najwyżej ${SLOT_MAX_LENGTH} znaków. Jeśli narzędzie zwróci błąd invalid_slot, skróć pole slot (skrót dnia, bez tytułów) i spróbuj jeszcze raz. Gdy narzędzie odpowie, powiedz, że zgłoszenie zostało przekazane i recepcja potwierdzi termin SMS-em.
 
 # Prośba o kontakt z człowiekiem
 W tej wersji nie łączysz rozmów. Zbierz imię i nazwisko, numer telefonu i dogodną porę na telefon, a potem użyj ${TICKET_TOOL} z kategorią "callback". Powiedz, że recepcja oddzwoni.

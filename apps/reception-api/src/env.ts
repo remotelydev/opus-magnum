@@ -5,9 +5,21 @@ import { fileURLToPath } from "node:url";
 export function loadLocalEnv(
   path = join(dirname(fileURLToPath(import.meta.url)), "../.env"),
 ): void {
-  if (!existsSync(path)) {
-    return;
+  if (existsSync(path)) {
+    readEnvFile(path);
   }
+  dropBlankVariables();
+}
+
+function dropBlankVariables(): void {
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined && value.trim() === "") {
+      delete process.env[key];
+    }
+  }
+}
+
+function readEnvFile(path: string): void {
   // Variables set outside .env win; inside .env the last line wins, like `. ./.env`.
   const preset = new Set(Object.keys(process.env));
   for (const rawLine of readFileSync(path, "utf8").split("\n")) {
