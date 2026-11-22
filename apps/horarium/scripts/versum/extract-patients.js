@@ -11,8 +11,11 @@
 (() => {
   const DB_NAME = "versum-export";
   const STORE = "patients";
-  const CONCURRENCY = 4;
   const PAGE_SIZE = 100;
+  // Versum answers 429 (Too Many Requests) and locks the account for a while when pushed: in Nov 2026
+  // four parallel requests (~5 per second) tripped it within minutes. So one request at a time, at
+  // least GAP_MS apart, and on a 429 everything pauses, longer each time.
+  const GAP_MS = 1200;
   const salon = location.pathname.split("/")[1] || document.querySelector('a[href$="/customers"]')?.getAttribute("href").split("/")[1];
   if (!salon || !/^[0-9a-f]{6,}$/.test(salon)) throw new Error("Open the Versum panel first (panel.versum.com/<salon>/...).");
 
@@ -36,13 +39,30 @@
   const allRecords = () => tx("readonly", (s) => s.getAll());
   const put = (rec) => tx("readwrite", (s) => s.put(rec));
 
+  const state = { running: false, stop: false, total: 0, done: 0, errors: [], phase: "idle" };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let nextSlot = 0;
+  let backoff = 0;
   async function page(url) {
     for (let attempt = 1; ; attempt++) {
+      const wait = nextSlot - Date.now();
+      nextSlot = Math.max(Date.now(), nextSlot) + GAP_MS;
+      if (wait > 0) await sleep(wait);
       const res = await fetch(url, { credentials: "include" });
-      if (res.ok) return new DOMParser().parseFromString(await res.text(), "text/html");
+      if (res.ok) {
+        backoff = 0;
+        return new DOMParser().parseFromString(await res.text(), "text/html");
+      }
       if (res.status === 404) return null;
+      if (res.status === 429) {
+        backoff = Math.min(backoff ? backoff * 2 : 60_000, 15 * 60_000);
+        state.phase = `paused by Versum (429), retry in ${Math.round(backoff / 1000)} s`;
+        nextSlot = Date.now() + backoff;
+        if (state.stop) throw new Error("stopped");
+        continue;
+      }
       if (attempt >= 5) throw new Error(`${res.status} ${url}`);
-      await new Promise((r) => setTimeout(r, 2000 * attempt));
+      await sleep(2000 * attempt);
     }
   }
 
@@ -114,10 +134,8 @@
   }
 
   async function fetchPatient(id) {
-    const [edit, personal] = await Promise.all([
-      page(`/${salon}/customers/${id}/edit`),
-      page(`/${salon}/customers/${id}?tab_name=personal_data`),
-    ]);
+    const edit = await page(`/${salon}/customers/${id}/edit`);
+    const personal = edit && (await page(`/${salon}/customers/${id}?tab_name=personal_data`));
     if (!edit) return { id, missing: true, fetchedAt: new Date().toISOString() };
     return { id, ...formFields(edit), shown: personal ? shownData(personal) : {}, fetchedAt: new Date().toISOString() };
   }
@@ -136,31 +154,31 @@
     return [...new Set(ids)];
   }
 
-  const state = { running: false, stop: false, total: 0, done: 0, errors: [], phase: "idle" };
-
-  async function run({ limit } = {}) {
+  /** `ids`: skip listing (e.g. the ids from an earlier listing, kept in localStorage). */
+  async function run({ limit, ids: given } = {}) {
     if (state.running) return status();
     Object.assign(state, { running: true, stop: false, errors: [], phase: "listing" });
     try {
-      let ids = await listIds((p, n) => (state.phase = `listing page ${p} (${n})`));
+      let ids = given ?? JSON.parse(localStorage.getItem("versum-export-ids") || "null");
+      if (!ids) {
+        ids = await listIds((p, n) => (state.phase = `listing page ${p} (${n})`));
+        localStorage.setItem("versum-export-ids", JSON.stringify(ids));
+      }
       if (limit) ids = ids.slice(0, limit);
       const have = new Set((await allKeys()).map(String));
       const todo = ids.filter((id) => !have.has(id));
       Object.assign(state, { total: ids.length, done: ids.length - todo.length, phase: "cards" });
-      let next = 0;
-      const worker = async () => {
-        while (!state.stop && next < todo.length) {
-          const id = todo[next++];
-          try {
-            await put(await fetchPatient(id));
-            state.done++;
-          } catch (e) {
-            state.errors.push({ id, error: String(e.message || e) });
-            if (/logged out/.test(e.message)) state.stop = true;
-          }
+      for (const id of todo) {
+        if (state.stop) break;
+        try {
+          await put(await fetchPatient(id));
+          state.done++;
+          state.phase = "cards";
+        } catch (e) {
+          state.errors.push({ id, error: String(e.message || e) });
+          if (/logged out/.test(e.message)) state.stop = true;
         }
-      };
-      await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+      }
       state.phase = state.stop ? "stopped" : "finished";
     } catch (e) {
       state.phase = `failed: ${e.message || e}`;
@@ -172,6 +190,12 @@
 
   function status() {
     return { phase: state.phase, running: state.running, done: state.done, total: state.total, errors: state.errors.length, lastErrors: state.errors.slice(-3) };
+  }
+
+  /** Forget the saved patient list, so the next run lists Versum again (picks up cards added since). */
+  function relist() {
+    localStorage.removeItem("versum-export-ids");
+    return "next run() lists patients again";
   }
 
   async function download() {
@@ -186,6 +210,6 @@
     return { records: records.length, bytes: blob.size, file: a.download };
   }
 
-  window.versumPatients = { run, status, download, stop: () => { state.stop = true; return status(); }, fetchPatient, count: async () => (await allKeys()).length };
+  window.versumPatients = { run, status, download, relist, stop: () => { state.stop = true; return status(); }, fetchPatient, count: async () => (await allKeys()).length };
   return "versumPatients ready: run(), status(), stop(), download()";
 })();
