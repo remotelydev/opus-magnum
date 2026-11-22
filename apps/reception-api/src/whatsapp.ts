@@ -12,8 +12,8 @@ export const DEFAULT_GRAPH_VERSION = "v22.0";
 export const TICKET_CATEGORIES = ["book", "callback", "other"] as const;
 export type TicketCategory = (typeof TICKET_CATEGORIES)[number];
 
-const SLOT_MAX_LENGTH = 80;
-const NAME_MAX_LENGTH = 80;
+export const SLOT_MAX_LENGTH = 80;
+export const NAME_MAX_LENGTH = 80;
 
 export interface BookingTicket {
   locationId: string;
