@@ -169,6 +169,37 @@ describe("horarium API", { skip: TEST_DATABASE_URL ? false : "TEST_DATABASE_URL 
     assert.equal(unknownOnly.status, 400);
   });
 
+  test("patients: card details (Opis, PESEL, address, consents), search by PESEL and card number", async () => {
+    const created = await call("POST", "/api/patients", "recepcja.turek", {
+      firstName: "Karol",
+      lastName: "Szczegółowy",
+      description: "Boi się igieł.\nWizyty rano.",
+      gender: "male",
+      pesel: "90010112345",
+      cardNumber: "7788",
+      street: "Polna",
+      houseNumber: "3",
+      postalCode: "62-700",
+      city: "Turek",
+      emailConsent: true,
+      marketingConsent: false,
+    });
+    assert.equal(created.status, 201);
+    const card = await call("GET", `/api/patients/${created.body.id}`, "dr.kowalska");
+    assert.equal(card.body.description, "Boi się igieł.\nWizyty rano.");
+    assert.equal(card.body.pesel, "90010112345");
+    assert.equal(card.body.emailConsent, true);
+    assert.deepEqual(card.body.groups, []);
+    assert.equal(card.body.importedFrom, null);
+    const byPesel = await call("GET", "/api/patients/list?q=900101", "recepcja.turek");
+    assert.deepEqual(byPesel.body.items.map((p: { lastName: string }) => p.lastName), ["Szczegółowy"]);
+    const byCard = await call("GET", "/api/patients/list?q=7788", "recepcja.turek");
+    assert.deepEqual(byCard.body.items.map((p: { lastName: string }) => p.lastName), ["Szczegółowy"]);
+    const badPesel = await call("PATCH", `/api/patients/${created.body.id}`, "recepcja.turek", { pesel: "123" });
+    assert.equal(badPesel.status, 400);
+    assert.equal((await call("PATCH", `/api/patients/${created.body.id}`, "recepcja.turek", { gender: "x" })).status, 400);
+  });
+
   test("appointments: duration from service, overlap blocked, cancel frees the slot, move keeps length", async () => {
     const staffId = (await call("GET", "/api/staff", "admin")).body[0].id;
     const serviceId = (await call("GET", "/api/services", "admin")).body[0].id;

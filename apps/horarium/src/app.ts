@@ -55,6 +55,26 @@ function patientRow(r: Record<string, unknown>) {
     medicalFlags: r.medical_flags,
     notes: r.notes,
     smsConsent: r.sms_consent,
+    description: r.description ?? null,
+    gender: r.gender ?? null,
+    pesel: r.pesel ?? null,
+    cardNumber: r.card_number ?? null,
+    taxId: r.tax_id ?? null,
+    street: r.street ?? null,
+    houseNumber: r.house_number ?? null,
+    unitNumber: r.unit_number ?? null,
+    postalCode: r.postal_code ?? null,
+    city: r.city ?? null,
+    province: r.province ?? null,
+    country: r.country ?? null,
+    nameDay: r.name_day ?? null,
+    groups: r.patient_groups ?? [],
+    origin: r.origin ?? null,
+    referredBy: r.referred_by_name ? { id: r.referred_by_patient_id, name: r.referred_by_name } : null,
+    emailConsent: r.email_consent ?? false,
+    marketingConsent: r.marketing_consent ?? false,
+    importedFrom: r.import_data ? "versum" : null,
+    createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : null,
   };
 }
 
@@ -71,7 +91,7 @@ function patientSummary(r: Record<string, unknown>) {
 
 /**
  * WHERE clause for the patient list. Text that is only digits and phone punctuation (3+ digits)
- * matches anywhere in the phone number; otherwise every word must start the first name, the
+ * matches anywhere in the phone number, the start of a PESEL or a whole card number; otherwise every word must start the first name, the
  * surname, or a part of a double-barrelled surname ("Kowal" finds "Nowak-Kowalska").
  */
 export function patientFilter(q: string): { where: string; params: string[] } {
@@ -79,7 +99,11 @@ export function patientFilter(q: string): { where: string; params: string[] } {
   if (!text) return { where: "", params: [] };
   const digits = text.replace(/[\s\-+().]/g, "");
   if (/^\d{3,}$/.test(digits)) {
-    return { where: "WHERE regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g') LIKE $1", params: [`%${digits}%`] };
+    // Also a PESEL (from its start) or a Versum card number (exactly), both kept on imported cards.
+    return {
+      where: `WHERE regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g') LIKE $1 OR pesel LIKE $2 OR card_number = $3`,
+      params: [`%${digits}%`, `${digits}%`, digits],
+    };
   }
   const params: string[] = [];
   const clauses = text
@@ -291,7 +315,12 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     "/api/patients/:id",
     { preHandler: guard(ALL), schema: { params: { type: "object", properties: { id: { type: "integer" } } } } },
     async (req, reply) => {
-      const { rows } = await db.query("SELECT * FROM patients WHERE id = $1", [req.params.id]);
+      const { rows } = await db.query(
+        `SELECT p.*, r.first_name || ' ' || r.last_name AS referred_by_name
+           FROM patients p LEFT JOIN patients r ON r.id = p.referred_by_patient_id
+          WHERE p.id = $1`,
+        [req.params.id],
+      );
       if (!rows[0]) return reply.code(404).send({ error: "Nie ma takiego pacjenta." });
       // Opening a card is logged too: who looked at which patient's data, and when.
       await audit(db, req.user!.id, "patient.view", "patient", req.params.id);
@@ -311,6 +340,18 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     medicalFlags: { type: "array", items: { type: "string" } },
     notes: { type: ["string", "null"] },
     smsConsent: { type: "boolean" },
+    description: { type: ["string", "null"] },
+    gender: { type: ["string", "null"], enum: ["female", "male", null] },
+    pesel: { type: ["string", "null"], pattern: "^[0-9]{11}$" },
+    cardNumber: { type: ["string", "null"] },
+    taxId: { type: ["string", "null"] },
+    street: { type: ["string", "null"] },
+    houseNumber: { type: ["string", "null"] },
+    unitNumber: { type: ["string", "null"] },
+    postalCode: { type: ["string", "null"] },
+    city: { type: ["string", "null"] },
+    emailConsent: { type: "boolean" },
+    marketingConsent: { type: "boolean" },
   } as const;
   const patientColumns: Record<string, string> = {
     firstName: "first_name",
@@ -321,6 +362,18 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     medicalFlags: "medical_flags",
     notes: "notes",
     smsConsent: "sms_consent",
+    description: "description",
+    gender: "gender",
+    pesel: "pesel",
+    cardNumber: "card_number",
+    taxId: "tax_id",
+    street: "street",
+    houseNumber: "house_number",
+    unitNumber: "unit_number",
+    postalCode: "postal_code",
+    city: "city",
+    emailConsent: "email_consent",
+    marketingConsent: "marketing_consent",
   };
   type PatientBody = Partial<{
     firstName: string;
@@ -331,6 +384,18 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     medicalFlags: string[];
     notes: string | null;
     smsConsent: boolean;
+    description: string | null;
+    gender: "female" | "male" | null;
+    pesel: string | null;
+    cardNumber: string | null;
+    taxId: string | null;
+    street: string | null;
+    houseNumber: string | null;
+    unitNumber: string | null;
+    postalCode: string | null;
+    city: string | null;
+    emailConsent: boolean;
+    marketingConsent: boolean;
   }>;
 
   function cleanPatient(body: PatientBody): PatientBody {
