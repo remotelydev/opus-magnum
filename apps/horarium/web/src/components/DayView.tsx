@@ -1,4 +1,4 @@
-import { STATUS_CLASSES } from "@opus-magnum/dentaplus-ui/components/status";
+import { statusClasses } from "@opus-magnum/dentaplus-ui/components/status";
 import { calendar } from "@opus-magnum/dentaplus-ui/tokens";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { api, type Appointment, type ScheduleBlock, type Service, type Site, type Staff } from "../lib/api.ts";
@@ -309,7 +309,7 @@ export function DayView({
                       }}
                       onClick={() => setSelected(a.id)}
                       className={`absolute z-10 overflow-hidden rounded-sm border-l-4 px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-sm ${
-                        STATUS_CLASSES[a.status]
+                        statusClasses(a.status)
                       } ${selected === a.id ? "ring-2 ring-ring" : ""}`}
                       style={{
                         top: top * PX_PER_MIN,

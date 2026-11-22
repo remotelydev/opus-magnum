@@ -5,6 +5,7 @@ import { formatMinutes, toClinicTime } from "../lib/time.ts";
 
 const dateFmt = new Intl.DateTimeFormat("pl-PL", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" });
 const formatDate = (iso: string) => dateFmt.format(new Date(`${iso.slice(0, 10)}T12:00:00Z`));
+const money = new Intl.NumberFormat("pl-PL", { style: "currency", currency: "PLN" });
 
 interface Props {
   /** Newest first. */
@@ -55,7 +56,14 @@ export function VisitHistory({ visits, staff, sites, limit, compact = false, onO
             <p className="text-muted-foreground">
               {doctor(a.staffId)} · <span data-testid="visit-site">{siteName(sites, a.siteId)}</span>
               {compact ? ` · ${STATUS_LABEL[a.status]}` : ""}
+              {a.tags?.length ? ` · ${a.tags.join(", ")}` : ""}
             </p>
+            {a.payments && a.payments.length > 0 && (
+              <p className="mt-1 text-muted-foreground" data-testid="payments">
+                <span className="font-medium">Płatność: </span>
+                {a.payments.map((p) => `${money.format(p.amount)} (${p.methodLabel ?? p.method})`).join(", ")}
+              </p>
+            )}
             {a.treatmentNotes && (
               <p className="mt-1 whitespace-pre-line" data-testid="treatment">
                 <span className="font-medium">Opis leczenia: </span>
