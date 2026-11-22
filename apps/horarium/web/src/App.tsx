@@ -15,6 +15,7 @@ import { BottomNav, Sidebar, type View } from "./components/Sidebar.tsx";
 import { api, ApiError, type Service, type Site, type Staff, type User } from "./lib/api.ts";
 import { readChoice, saveChoice, selectedIds, workHours, workingIds, type ColumnChoice } from "./lib/columns.ts";
 import { readCollapsed, saveCollapsed } from "./lib/sidebar.ts";
+import { ALL_SITES, calendarColumns, siteColor } from "./lib/sites.ts";
 import { addDays, formatDay, todayInClinic } from "./lib/time.ts";
 import { useDayData } from "./lib/useDayData.ts";
 import { useMediaQuery } from "./lib/useMediaQuery.ts";
@@ -75,6 +76,9 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [panelOpen, setPanelOpen] = useState(false);
   const day = useDayData(site, date, view === "calendar");
   const [showCancelled, setShowCancelled] = useState(true);
+  // Links between the calendar and the patient card: the visit to open, the card to open.
+  const [focusVisit, setFocusVisit] = useState<number | null>(null);
+  const all = site === ALL_SITES;
 
   useEffect(() => {
     if (!menuOpen && !panelOpen) return;
@@ -110,8 +114,15 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
       .catch((e: Error) => setError(e.message));
   }, [view]);
 
+  /** The user moving to another day: a visit opened from the patient card stays behind. */
+  const goTo = (d: string) => {
+    setDate(d);
+    setFocusVisit(null);
+  };
+
   const chooseSite = (id: string) => {
     setSite(id);
+    setFocusVisit(null);
     setChoice(readChoice(id));
     try {
       localStorage.setItem(SITE_KEY, id);
@@ -125,13 +136,29 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
     onLogout();
   };
 
+  const openVisit = (siteId: string, day: string, appointmentId: number) => {
+    // Stay on "Wszystkie" when it is on: the visit is there too.
+    if (!all) chooseSite(siteId);
+    setDate(day);
+    setFocusVisit(appointmentId);
+    setView("calendar");
+  };
+
+  const openPatientCard = (patientId: number) => {
+    setOpenPatient(patientId);
+    setView("patients");
+  };
+
   const openView = (next: View) => {
     if (next === "schedule") setScheduleStaff(null);
     if (next === "patients") setOpenPatient(null);
     setView(next);
     setMenuOpen(false);
   };
-  const siteStaff = useMemo(() => staff.filter((s) => s.active && s.sites.includes(site)), [staff, site]);
+  const siteStaff = useMemo(
+    () => staff.filter((s) => s.active && (site === ALL_SITES || s.sites.includes(site))),
+    [staff, site],
+  );
 
   // Until the new day's schedule arrives, keep the previous day's set so the columns do not jump.
   const lastWorking = useRef<Set<number>>(new Set());
@@ -141,7 +168,10 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
   }, [day.loaded, day.schedules, day.appointments, date]);
   const hours = useMemo(() => workHours(date, day.schedules), [date, day.schedules]);
   const selected = useMemo(() => selectedIds(siteStaff, choice, working), [siteStaff, choice, working]);
-  const columns = siteStaff.filter((s) => selected.has(s.id));
+  const columns = useMemo(
+    () => calendarColumns(siteStaff.filter((s) => selected.has(s.id))),
+    [siteStaff, selected],
+  );
   const liveVisits = day.appointments.filter((a) => a.status !== "cancelled");
   const visitCount = liveVisits.filter((a) => selected.has(a.staffId)).length;
   const hiddenVisits = liveVisits.length - visitCount;
@@ -166,7 +196,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
     <DayStaffPanel
       date={date}
       onDate={(d) => {
-        setDate(d);
+        goTo(d);
         if (drawer) setPanelOpen(false);
       }}
       staff={siteStaff}
@@ -221,18 +251,18 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
                 variant="outline"
                 size="icon"
                 aria-label="Poprzedni dzień"
-                onClick={() => setDate(addDays(date, -1))}
+                onClick={() => goTo(addDays(date, -1))}
               >
                 <ChevronLeftIcon />
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setDate(todayInClinic())}>
+              <Button variant="outline" size="sm" onClick={() => goTo(todayInClinic())}>
                 Dziś
               </Button>
               <Button
                 variant="outline"
                 size="icon"
                 aria-label="Następny dzień"
-                onClick={() => setDate(addDays(date, 1))}
+                onClick={() => goTo(addDays(date, 1))}
               >
                 <ChevronRightIcon />
               </Button>
@@ -268,17 +298,24 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               role="tablist"
               aria-label="Placówka"
             >
-              {sites.map((s) => (
-                <button
-                  key={s.id}
-                  role="tab"
-                  aria-selected={s.id === site}
-                  onClick={() => chooseSite(s.id)}
-                  className={`px-3 py-1 text-xs pointer-coarse:py-2 ${s.id === site ? "bg-primary text-primary-foreground" : "bg-surface hover:bg-muted"}`}
-                >
-                  {s.name}
-                </button>
-              ))}
+              {[...sites, { id: ALL_SITES, name: "Wszystkie" }].map((s) => {
+                // Each clinic in its own colour, the same as on the calendar: filled when chosen, a dot otherwise.
+                const color = s.id === ALL_SITES ? null : siteColor(s.id);
+                const on = s.id === site;
+                return (
+                  <button
+                    key={s.id}
+                    role="tab"
+                    aria-selected={on}
+                    onClick={() => chooseSite(s.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1 text-xs pointer-coarse:py-2 ${on ? (color ? "text-white" : "bg-primary text-primary-foreground") : "bg-surface hover:bg-muted"}`}
+                    style={on && color ? { background: color } : undefined}
+                  >
+                    {color && !on && <span className="size-2 rounded-full" style={{ background: color }} aria-hidden="true" />}
+                    {s.name}
+                  </button>
+                );
+              })}
             </div>
           </header>
         )}
@@ -309,14 +346,12 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
             key={openPatient ?? "list"}
             initialPatientId={openPatient}
             sites={sites}
+            services={services}
+            site={site}
             staff={staff}
             canEdit={user.role !== "doctor"}
             canSeeHistory={user.role === "admin"}
-            onOpenDay={(siteId, day) => {
-              chooseSite(siteId);
-              setDate(day);
-              setView("calendar");
-            }}
+            onOpenDay={openVisit}
           />
         ) : (
           <div className="flex min-h-0 min-w-0 flex-1">
@@ -326,8 +361,12 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               </aside>
             )}
             <DayView
-              key={`${site}-${date}`}
+              key={`${site}-${date}-${focusVisit ?? ""}`}
               site={site}
+              sites={sites}
+              initialSelected={focusVisit}
+              onOpenPatient={openPatientCard}
+              onOpenVisit={openVisit}
               date={date}
               staff={siteStaff}
               columns={columns}
@@ -338,6 +377,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               services={services}
               canEdit={user.role !== "doctor"}
               canSeeHistory={user.role === "admin"}
+              canDescribe={user.role === "admin" || user.role === "doctor"}
               showCancelled={showCancelled}
             />
           </div>

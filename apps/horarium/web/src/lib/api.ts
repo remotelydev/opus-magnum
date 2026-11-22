@@ -149,6 +149,8 @@ export interface Appointment {
   status: AppointmentStatus;
   source: "desk" | "bot" | "import";
   notes: string | null;
+  /** The doctor's description of the treatment ("opis leczenia"). */
+  treatmentNotes: string | null;
 }
 export interface ScheduleBlock {
   id: number;
@@ -286,8 +288,19 @@ export const api = {
   }) => request<{ id: number; endsAt: string; warnings: string[] }>("POST", "/api/appointments", body),
   updateAppointment: (
     id: number,
-    body: Partial<{ staffId: number; startsAt: string; endsAt: string; status: AppointmentStatus; notes: string | null }>,
-  ) => request<{ ok: true; endsAt: string; warnings: string[] }>("PATCH", `/api/appointments/${id}`, body),
+    body: Partial<{
+      staffId: number;
+      siteId: string;
+      startsAt: string;
+      endsAt: string;
+      status: AppointmentStatus;
+      notes: string | null;
+      /** Ask the server to text the patient the new time (after a confirmed move). */
+      notifyPatient: boolean;
+    }>,
+  ) => request<{ ok: true; endsAt: string; warnings: string[]; sms?: string }>("PATCH", `/api/appointments/${id}`, body),
+  saveTreatment: (id: number, text: string | null) =>
+    request<{ ok: true }>("PUT", `/api/appointments/${id}/treatment`, { text }),
 };
 
 export { STATUS_LABEL } from "@opus-magnum/dentaplus-ui/components/status";

@@ -5,8 +5,9 @@ import { audit, type Db } from "./db.js";
 import { registerIntake } from "./intake.js";
 import { createLoginLimiter, type LoginLimiter } from "./login-limit.js";
 import { normalizePhone } from "./phone.js";
+import { movedVisitText, type SendSms } from "./sms.js";
 import { registerServices } from "./services.js";
-import { registerSettings } from "./settings.js";
+import { CLINIC_TZ, registerSettings } from "./settings.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -23,6 +24,8 @@ const PG_EXCLUSION_VIOLATION = "23P01";
 const PG_UNIQUE_VIOLATION = "23505";
 const PG_FK_VIOLATION = "23503";
 const MAX_RANGE_DAYS = 42;
+/** `site=all` in the calendar's reads: both clinics at once ("Wszystkie" in the site switcher). */
+const ALL_SITES = "all";
 
 const isoDateTime = { type: "string", format: "date-time" } as const;
 
@@ -137,6 +140,7 @@ function appointmentRow(r: Record<string, unknown>) {
     status: r.status,
     source: r.source,
     notes: r.notes,
+    treatmentNotes: r.treatment_notes ?? null,
   };
 }
 
@@ -155,6 +159,8 @@ export interface AppOptions {
   publicOrigins?: string[];
   /** Failed-login limiter; tests pass their own. */
   loginLimiter?: LoginLimiter;
+  /** Texts patients (the clinic's TG200 gateway); without it "Powiadom pacjenta" says SMS is off. */
+  sendSms?: SendSms;
 }
 
 // Request logs keep the path only: search queries (?q=surname or phone) must not land in log files.
@@ -494,7 +500,8 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     },
     async (req) => {
       const { rows } = await db.query(
-        "SELECT * FROM schedules WHERE site_id = $1 AND starts_at < $3 AND ends_at > $2 ORDER BY starts_at",
+        `SELECT * FROM schedules WHERE ($1 = '${ALL_SITES}' OR site_id = $1) AND starts_at < $3 AND ends_at > $2
+          ORDER BY starts_at`,
         [req.query.site, req.query.from, req.query.to],
       );
       return rows.map((r) => ({
@@ -529,6 +536,22 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     async (req, reply) => {
       const b = req.body;
       if (new Date(b.endsAt) <= new Date(b.startsAt)) return reply.code(400).send({ error: "Koniec przed początkiem." });
+      // A person works at one clinic a day: hours at the other clinic on the same day are refused.
+      if ((b.kind ?? "work") === "work") {
+        const other = await db.query<{ name: string }>(
+          `SELECT si.name FROM schedules sc
+             JOIN staff st ON st.id = sc.staff_id AND st.kind = 'person'
+             JOIN sites si ON si.id = sc.site_id
+            WHERE sc.staff_id = $1 AND sc.kind = 'work' AND sc.site_id <> $2
+              AND (sc.starts_at AT TIME ZONE '${CLINIC_TZ}')::date <= ($4::timestamptz AT TIME ZONE '${CLINIC_TZ}')::date
+              AND (sc.ends_at AT TIME ZONE '${CLINIC_TZ}')::date >= ($3::timestamptz AT TIME ZONE '${CLINIC_TZ}')::date
+            LIMIT 1`,
+          [b.staffId, b.siteId, b.startsAt, b.endsAt],
+        );
+        if (other.rows[0]) {
+          return reply.code(409).send({ error: `Tego dnia ta osoba pracuje już w klinice ${other.rows[0].name}.` });
+        }
+      }
       const { rows } = await db.query<{ id: number }>(
         "INSERT INTO schedules (staff_id, site_id, starts_at, ends_at, kind) VALUES ($1, $2, $3, $4, $5) RETURNING id",
         [b.staffId, b.siteId, b.startsAt, b.endsAt, b.kind ?? "work"],
@@ -569,7 +592,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
       }
       const { rows } = await db.query(
         `${APPOINTMENT_SELECT}
-          WHERE a.site_id = $1 AND a.starts_at < $3 AND a.ends_at > $2 AND ($4::int IS NULL OR a.staff_id = $4)
+          WHERE ($1 = '${ALL_SITES}' OR a.site_id = $1) AND a.starts_at < $3 AND a.ends_at > $2 AND ($4::int IS NULL OR a.staff_id = $4)
           ORDER BY a.starts_at`,
         [site, from, to, staffId ?? null],
       );
@@ -593,6 +616,34 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     if (!r.in_hours) warnings.push("Poza godzinami pracy z grafiku.");
     if (r.absent) warnings.push("Lekarz ma w tym czasie nieobecność.");
     return warnings;
+  }
+
+  /**
+   * Texts the patient the new time of a moved visit, when reception ticked "Powiadom pacjenta".
+   * Sent whatever the SMS consent: it is information about their visit, not marketing. Returns the
+   * line reception sees; the change log records whether it went, never the text or the number.
+   */
+  async function notifyMoved(
+    userId: number,
+    appointmentId: number,
+    patientId: number | null,
+    next: { startsAt: string; siteId: string },
+  ): Promise<string> {
+    const fail = async (reason: string) => {
+      await audit(db, userId, "appointment.notify", "appointment", appointmentId, { channel: "sms", sent: false, reason });
+      return `SMS nie został wysłany: ${reason}.`;
+    };
+    if (!opts.sendSms) return fail("wysyłka SMS nie jest skonfigurowana");
+    if (!patientId) return fail("to nie jest wizyta pacjenta");
+    const { rows } = await db.query(
+      "SELECT p.phone, s.name AS site_name FROM patients p, sites s WHERE p.id = $1 AND s.id = $2",
+      [patientId, next.siteId],
+    );
+    if (!rows[0]?.phone) return fail("pacjent nie ma numeru telefonu");
+    const result = await opts.sendSms(rows[0].phone, movedVisitText(new Date(next.startsAt), rows[0].site_name));
+    if (!result.sent) return fail(result.reason ?? "nieznany błąd bramki");
+    await audit(db, userId, "appointment.notify", "appointment", appointmentId, { channel: "sms", sent: true });
+    return `Wysłano SMS do pacjenta (${rows[0].phone}).`;
   }
 
   async function serviceDuration(serviceId: number | null | undefined): Promise<number | null> {
@@ -674,7 +725,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
 
   app.patch<{
     Params: { id: number };
-    Body: Partial<{ staffId: number; siteId: string; startsAt: string; endsAt: string; status: string; notes: string | null; serviceId: number | null; title: string | null }>;
+    Body: Partial<{ staffId: number; siteId: string; startsAt: string; endsAt: string; status: string; notes: string | null; serviceId: number | null; title: string | null; notifyPatient: boolean }>;
   }>(
     "/api/appointments/:id",
     {
@@ -693,6 +744,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
             notes: { type: ["string", "null"] },
             serviceId: { type: ["integer", "null"] },
             title: { type: ["string", "null"] },
+            notifyPatient: { type: "boolean" },
           },
         },
       },
@@ -700,7 +752,8 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     async (req, reply) => {
       const current = (await db.query("SELECT * FROM appointments WHERE id = $1", [req.params.id])).rows[0];
       if (!current) return reply.code(404).send({ error: "Nie ma takiej wizyty." });
-      const b = req.body;
+      const { notifyPatient, ...b } = req.body;
+      if (notifyPatient !== undefined && !Object.keys(b).length) noFields();
       const next = {
         staffId: b.staffId ?? current.staff_id,
         siteId: b.siteId ?? current.site_id,
@@ -729,7 +782,31 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
         status: b.status,
         startsAt: b.startsAt ? next.startsAt : undefined,
       });
-      return { ok: true, endsAt: next.endsAt, warnings };
+      const sms = notifyPatient ? await notifyMoved(req.user!.id, req.params.id, current.patient_id, next) : undefined;
+      return { ok: true, endsAt: next.endsAt, warnings, ...(sms ? { sms } : {}) };
+    },
+  );
+
+  // The doctor's description of the treatment. Doctors and admins write it; reception does not.
+  // The change log keeps only that it changed, never the medical text.
+  app.put<{ Params: { id: number }; Body: { text: string | null } }>(
+    "/api/appointments/:id/treatment",
+    {
+      preHandler: guard(["admin", "doctor"]),
+      schema: {
+        params: { type: "object", properties: { id: { type: "integer" } } },
+        body: { type: "object", required: ["text"], properties: { text: { type: ["string", "null"], maxLength: 20000 } } },
+      },
+    },
+    async (req, reply) => {
+      const text = req.body.text?.trim() || null;
+      const { rowCount } = await db.query(
+        "UPDATE appointments SET treatment_notes = $2, updated_at = now() WHERE id = $1",
+        [req.params.id, text],
+      );
+      if (!rowCount) return reply.code(404).send({ error: "Nie ma takiej wizyty." });
+      await audit(db, req.user!.id, "appointment.update", "appointment", req.params.id, { fields: ["treatmentNotes"] });
+      return { ok: true };
     },
   );
 

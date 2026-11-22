@@ -1,8 +1,9 @@
 import { STATUS_CLASSES } from "@opus-magnum/dentaplus-ui/components/status";
 import { calendar } from "@opus-magnum/dentaplus-ui/tokens";
-import { useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
-import { api, type Appointment, type ScheduleBlock, type Service, type Staff } from "../lib/api.ts";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
+import { api, type Appointment, type ScheduleBlock, type Service, type Site, type Staff } from "../lib/api.ts";
 import { staffColor } from "../lib/columns.ts";
+import { ALL_SITES, siteColor, siteName, type CalendarColumn } from "../lib/sites.ts";
 import {
   DAY_END_MIN,
   DAY_START_MIN,
@@ -15,6 +16,7 @@ import {
 } from "../lib/time.ts";
 import { AppointmentPanel } from "./AppointmentPanel.tsx";
 import { BookingDialog } from "./BookingDialog.tsx";
+import { MoveDialog } from "./MoveDialog.tsx";
 
 const PX_PER_MIN = calendar.pxPerMinute;
 /** Every column gets an equal share; the rows are at least 9rem (8rem on desktops) per doctor wide,
@@ -26,12 +28,14 @@ const HOURS = Array.from({ length: (DAY_END_MIN - DAY_START_MIN) / 60 }, (_, i) 
 
 
 interface Props {
+  /** A site id, or ALL_SITES for both clinics on one calendar. */
   site: string;
+  sites: Site[];
   date: string;
   /** Everyone at the site: the booking and visit dialogs can pick any of them. */
   staff: Staff[];
   /** The people ticked in the staff panel, one column each. */
-  columns: Staff[];
+  columns: CalendarColumn[];
   /** The day's data, loaded once for the calendar and the staff panel (see useDayData). */
   appointments: Appointment[];
   schedules: ScheduleBlock[];
@@ -41,14 +45,23 @@ interface Props {
   canEdit: boolean;
   /** Admins see each patient's change log in the visit panel. */
   canSeeHistory?: boolean;
+  /** Doctors and admins write the treatment description in the visit panel. */
+  canDescribe?: boolean;
   /** "Pokaż odwołane" in the header: cancelled and no-show visits stay on the calendar. */
   showCancelled?: boolean;
+  /** Visit to open on arrival, e.g. after "Pokaż w terminarzu" in the patient card. */
+  initialSelected?: number | null;
+  onOpenPatient?: (patientId: number) => void;
+  onOpenVisit?: (siteId: string, date: string, appointmentId: number) => void;
 }
 
-type Booking = { staffId: number; startMin: number };
+type Booking = { staffId: number; startMin: number; siteId: string | null };
+type Hover = { key: string; startMin: number };
+type Move = { appt: Appointment; staffId: number; siteId: string; startMin: number };
 
 export function DayView({
   site,
+  sites,
   date,
   staff,
   columns,
@@ -59,32 +72,59 @@ export function DayView({
   services,
   canEdit,
   canSeeHistory = false,
+  canDescribe = false,
   showCancelled = true,
+  initialSelected = null,
+  onOpenPatient,
+  onOpenVisit,
 }: Props) {
+  const all = site === ALL_SITES;
   const [notice, setNotice] = useState<string | null>(null);
   const [booking, setBooking] = useState<Booking | null>(null);
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selected, setSelected] = useState<number | null>(initialSelected);
+  const [move, setMove] = useState<Move | null>(null);
+  const [moveBusy, setMoveBusy] = useState(false);
+  const [moveError, setMoveError] = useState<string | null>(null);
   /** The free slot under the mouse, as in Versum: its start time shows in the slot's top-left corner.
    *  Mouse only: touch screens have no hover and keep the plain tap-to-book. */
-  const [hover, setHover] = useState<Booking | null>(null);
+  const [hover, setHover] = useState<Hover | null>(null);
   const dragOffsetMin = useRef(0);
+  const scroller = useRef<HTMLDivElement>(null);
 
-  const byStaff = useMemo(() => {
-    const map = new Map<number, { appts: Appointment[]; blocks: ScheduleBlock[] }>();
-    for (const s of staff) map.set(s.id, { appts: [], blocks: [] });
-    for (const a of appointments) {
-      if (!showCancelled && (a.status === "cancelled" || a.status === "no_show")) continue;
-      map.get(a.staffId)?.appts.push(a);
+  // A visit opened from the patient card: bring it into view once its column is drawn.
+  const scrolledTo = useRef(false);
+  useEffect(() => {
+    if (!initialSelected || scrolledTo.current) return;
+    const el = scroller.current?.querySelector(`[data-appt="${initialSelected}"]`);
+    if (!el) return;
+    scrolledTo.current = true;
+    el.scrollIntoView({ block: "center", inline: "center" });
+  });
+
+  // Each column's visits and hours.
+  const byColumn = useMemo(() => {
+    const map = new Map<string, { appts: Appointment[]; blocks: ScheduleBlock[] }>();
+    for (const c of columns) {
+      map.set(c.key, {
+        appts: appointments.filter(
+          (a) =>
+            a.staffId === c.staff.id &&
+            (c.siteId === null || a.siteId === c.siteId) &&
+            (showCancelled || (a.status !== "cancelled" && a.status !== "no_show")),
+        ),
+        blocks: schedules.filter((b) => b.staffId === c.staff.id && (c.siteId === null || b.siteId === c.siteId)),
+      });
     }
-    for (const b of schedules) map.get(b.staffId)?.blocks.push(b);
     return map;
-  }, [staff, appointments, schedules, showCancelled]);
+  }, [columns, appointments, schedules, showCancelled]);
+
 
   // The click and the hover label use the same maths, so the time shown is the slot that opens.
   const minutesFromEvent = (e: { clientY: number; currentTarget: HTMLElement }) =>
     slotAt(e.clientY - e.currentTarget.getBoundingClientRect().top, PX_PER_MIN);
 
-  const onDrop = async (e: DragEvent<HTMLDivElement>, staffId: number) => {
+  // A drop only proposes the move; the dialog asks before anything changes.
+  const onDrop = (e: DragEvent<HTMLDivElement>, column: CalendarColumn) => {
     e.preventDefault();
     const id = Number(e.dataTransfer.getData("text/appointment"));
     const appt = appointments.find((a) => a.id === id);
@@ -93,23 +133,45 @@ export function DayView({
     const raw = DAY_START_MIN + (e.clientY - rect.top) / PX_PER_MIN - dragOffsetMin.current;
     const startMin = Math.max(DAY_START_MIN, Math.round(raw / SLOT_MIN) * SLOT_MIN);
     const current = toClinicTime(appt.startsAt).minutes;
-    if (startMin === current && staffId === appt.staffId) return;
-    try {
-      const res = await api.updateAppointment(id, {
-        staffId,
-        startsAt: fromClinicTime(date, startMin).toISOString(),
-      });
-      setNotice(res.warnings.length ? `Przeniesiono. Uwaga: ${res.warnings.join(" ")}` : "Przeniesiono wizytę.");
-    } catch (err) {
-      setNotice((err as Error).message);
-    }
-    load();
+    const siteId = column.siteId ?? appt.siteId;
+    if (startMin === current && column.staff.id === appt.staffId && siteId === appt.siteId) return;
+    setMoveError(null);
+    setMove({ appt, staffId: column.staff.id, siteId, startMin });
   };
+
+  const confirmMove = async (notifyPatient: boolean) => {
+    if (!move) return;
+    setMoveBusy(true);
+    setMoveError(null);
+    try {
+      const res = await api.updateAppointment(move.appt.id, {
+        staffId: move.staffId,
+        ...(move.siteId !== move.appt.siteId ? { siteId: move.siteId } : {}),
+        startsAt: fromClinicTime(date, move.startMin).toISOString(),
+        ...(notifyPatient ? { notifyPatient: true } : {}),
+      });
+      const parts = ["Przeniesiono wizytę."];
+      if (res.sms) parts.push(res.sms);
+      if (res.warnings.length) parts.push(`Uwaga: ${res.warnings.join(" ")}`);
+      setNotice(parts.join(" "));
+      setMove(null);
+      load();
+    } catch (err) {
+      setMoveError((err as Error).message);
+    } finally {
+      setMoveBusy(false);
+    }
+  };
+  const staffName = (id: number) => staff.find((s) => s.id === id)?.name ?? "?";
 
   const selectedAppt = appointments.find((a) => a.id === selected) ?? null;
 
   if (!staff.length) {
-    return <p className="p-6 text-sm text-muted-foreground">Brak lekarzy przypisanych do tej placówki.</p>;
+    return (
+      <p className="p-6 text-sm text-muted-foreground">
+        {all ? "Brak aktywnych lekarzy." : "Brak lekarzy przypisanych do tej placówki."}
+      </p>
+    );
   }
 
   return (
@@ -136,20 +198,23 @@ export function DayView({
         {/* Scrolls both ways: doctors' names stay on top and the hours stay on the left. On phones a
             column snaps into place after a swipe, about two doctors per screen. */}
         <div
+          ref={scroller}
           className={`min-h-0 flex-1 overflow-auto overscroll-contain max-sm:snap-x max-sm:snap-mandatory max-sm:scroll-pl-12 ${columns.length ? "" : "hidden"}`}
           style={{ "--cols": columns.length } as CSSProperties}
         >
-          <div className={`${ROW} sticky top-0 z-20 border-b border-border bg-surface`}>
-            <div className="sticky left-0 z-10 w-12 shrink-0 bg-surface sm:w-14" />
-            {columns.map((s) => (
-              <div
-                key={s.id}
-                className={`${COLUMN} border-t-4 border-l border-l-border px-2 py-1 text-xs font-medium`}
-                style={{ borderTopColor: staffColor(s) }}
-              >
-                <span className="line-clamp-2">{s.name}</span>
-              </div>
-            ))}
+          <div className={`sticky top-0 z-20 border-b border-border bg-surface`}>
+            <div className={ROW}>
+              <div className="sticky left-0 z-10 w-12 shrink-0 bg-surface sm:w-14" />
+              {columns.map((c, i) => (
+                <div
+                  key={c.key}
+                  className={`${COLUMN} border-t-4 border-l border-l-border px-2 py-1 text-xs font-medium`}
+                  style={{ borderTopColor: staffColor(c.staff) }}
+                >
+                  <span className="line-clamp-2">{c.staff.name}</span>
+                </div>
+              ))}
+            </div>
           </div>
           <div className={`${ROW} relative`} style={{ height: (DAY_END_MIN - DAY_START_MIN) * PX_PER_MIN + 8 }}>
             <div className="sticky left-0 z-[15] w-12 shrink-0 bg-surface text-[11px] text-muted-foreground sm:w-14">
@@ -159,8 +224,9 @@ export function DayView({
                 </div>
               ))}
             </div>
-            {columns.map((s) => {
-              const col = byStaff.get(s.id)!;
+            {columns.map((c, i) => {
+              const s = c.staff;
+              const col = byColumn.get(c.key)!;
               const placed = layoutColumn(
                 col.appts.map((a) => ({
                   a,
@@ -170,11 +236,11 @@ export function DayView({
               );
               return (
                 <div
-                  key={s.id}
+                  key={c.key}
                   className={`${COLUMN} relative mt-2 snap-start border-l border-border bg-calendar-off`}
                   onClick={(e) => {
                     if (!canEdit || e.target !== e.currentTarget) return;
-                    setBooking({ staffId: s.id, startMin: minutesFromEvent(e) });
+                    setBooking({ staffId: s.id, startMin: minutesFromEvent(e), siteId: c.siteId ?? (all ? null : site) });
                   }}
                   onPointerMove={(e) => {
                     if (!canEdit || e.pointerType !== "mouse" || e.target !== e.currentTarget || e.buttons) {
@@ -182,12 +248,12 @@ export function DayView({
                       return;
                     }
                     const startMin = minutesFromEvent(e);
-                    if (hover?.staffId !== s.id || hover.startMin !== startMin) setHover({ staffId: s.id, startMin });
+                    if (hover?.key !== c.key || hover.startMin !== startMin) setHover({ key: c.key, startMin });
                   }}
                   onPointerLeave={() => setHover(null)}
                   onDragOver={(e) => canEdit && e.preventDefault()}
-                  onDrop={(e) => onDrop(e, s.id)}
-                  data-testid={`column-${s.id}`}
+                  onDrop={(e) => onDrop(e, c)}
+                  data-testid={`column-${c.key}`}
                 >
                   {col.blocks.map((b) => {
                     const start = toClinicTime(b.startsAt);
@@ -198,12 +264,19 @@ export function DayView({
                     return (
                       <div
                         key={b.id}
+                        style={{
+                          top: top * PX_PER_MIN,
+                          height: (bottom - top) * PX_PER_MIN,
+                          // Both clinics: the working hours lightly tinted with the clinic's colour.
+                          ...(all && b.kind === "work"
+                            ? { backgroundImage: `linear-gradient(color-mix(in srgb, ${siteColor(b.siteId)} 12%, transparent), color-mix(in srgb, ${siteColor(b.siteId)} 12%, transparent))` }
+                            : {}),
+                        }}
                         className={`pointer-events-none absolute inset-x-0 ${
                           b.kind === "work"
                             ? "bg-calendar-on"
                             : "bg-[repeating-linear-gradient(45deg,transparent,transparent_6px,var(--dp-muted)_6px,var(--dp-muted)_12px)]"
                         }`}
-                        style={{ top: top * PX_PER_MIN, height: (bottom - top) * PX_PER_MIN }}
                         title={b.kind === "absence" ? "Nieobecność" : undefined}
                       />
                     );
@@ -215,7 +288,7 @@ export function DayView({
                       style={{ top: (h - DAY_START_MIN) * PX_PER_MIN }}
                     />
                   ))}
-                  {hover?.staffId === s.id && (
+                  {hover?.key === c.key && (
                     <div
                       className="pointer-events-none absolute inset-x-0 rounded-sm bg-primary/10 px-1 text-[11px] font-medium leading-4 text-foreground ring-1 ring-inset ring-primary/40"
                       style={{ top: (hover.startMin - DAY_START_MIN) * PX_PER_MIN, height: SLOT_MIN * PX_PER_MIN }}
@@ -243,7 +316,12 @@ export function DayView({
                         height: height * PX_PER_MIN - 1,
                         left: `calc(${(lane / lanes) * 100}% + 2px)`,
                         width: `calc(${100 / lanes}% - 4px)`,
+                        // Both clinics: the stripe on the left edge in the clinic's colour.
+                        ...(all ? { borderLeftColor: siteColor(a.siteId) } : {}),
                       }}
+                      title={all ? siteName(sites, a.siteId) : undefined}
+                      data-site={a.siteId}
+                      data-appt={a.id}
                     >
                       <span className="font-medium">
                         {formatMinutes(startMin)}–{formatMinutes(endMin)}{" "}
@@ -268,8 +346,12 @@ export function DayView({
           key={selectedAppt.id}
           appointment={selectedAppt}
           staff={staff}
+          sites={sites}
+          onOpenPatient={onOpenPatient}
+          onOpenVisit={onOpenVisit}
           canEdit={canEdit}
           canSeeHistory={canSeeHistory}
+          canDescribe={canDescribe}
           onClose={() => setSelected(null)}
           onChanged={(message) => {
             setNotice(message);
@@ -279,7 +361,8 @@ export function DayView({
       )}
       {booking && (
         <BookingDialog
-          site={site}
+          siteId={booking.siteId}
+          sites={sites}
           date={date}
           staff={staff}
           services={services}
@@ -290,6 +373,21 @@ export function DayView({
             setNotice(message);
             load();
           }}
+        />
+      )}
+      {move && (
+        <MoveDialog
+          appointment={move.appt}
+          from={{
+            startMin: toClinicTime(move.appt.startsAt).minutes,
+            staffName: staffName(move.appt.staffId),
+            siteName: siteName(sites, move.appt.siteId),
+          }}
+          to={{ startMin: move.startMin, staffName: staffName(move.staffId), siteName: siteName(sites, move.siteId) }}
+          busy={moveBusy}
+          error={moveError}
+          onConfirm={confirmMove}
+          onCancel={() => setMove(null)}
         />
       )}
     </div>

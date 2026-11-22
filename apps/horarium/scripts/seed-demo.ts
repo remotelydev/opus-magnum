@@ -454,7 +454,26 @@ async function seedAll(client: Queryable) {
       visits.map((v) => new Date(Math.min(Date.now(), today.getTime() + (v.offset - 7 - rand() * 28) * 86_400_000)).toISOString()),
     ],
   );
+  await demoTreatmentNotes(client);
   return { staff: STAFF.length, services: SERVICES.length, patients: patientIds.length, visits: visits.length };
+}
+
+/** Made-up treatment descriptions on most finished visits, so the visit history has something to read.
+ *  Fills only empty ones, so a demo database seeded before descriptions existed gets them too. */
+async function demoTreatmentNotes(client: Pick<Db, "query">) {
+  await client.query(
+    `UPDATE appointments SET treatment_notes = (ARRAY[
+       'Przegląd. Bez zmian próchniczych, kamień nazębny w odcinku przednim dolnym. Zalecona higienizacja.',
+       'Wypełnienie kompozytowe 36 (klasa I). Znieczulenie nasiękowe. Kontrola za 6 miesięcy.',
+       'Skaling i piaskowanie, instruktaż higieny. Dziąsła lekko krwawiące przy sondowaniu.',
+       'Leczenie kanałowe 46, wizyta 1: opracowanie kanałów, wkładka z wodorotlenkiem wapnia. Następna wizyta za 2 tygodnie.',
+       'Ekstrakcja 38, przebieg bez powikłań. Zalecenia pozabiegowe przekazane ustnie i na piśmie.',
+       'Konsultacja ortodontyczna, wykonano wyciski. Plan: aparat stały górny i dolny.',
+       'Wymiana wypełnienia 25, ubytek wtórny. Pacjent zgłasza nadwrażliwość na zimno, zalecona pasta.',
+       'Kontrola po ekstrakcji, gojenie prawidłowe. Szwy usunięte.'
+     ])[1 + (id % 8)]
+     WHERE treatment_notes IS NULL AND status = 'done' AND patient_id IS NOT NULL AND id % 5 <> 0`,
+  );
 }
 
 const db = createPool();
@@ -469,6 +488,7 @@ try {
       process.exit(1);
     }
     if (rows[0].n >= SCALE.patients) {
+      await demoTreatmentNotes(db);
       await addVersumDemo(db);
       console.log("demo data already at full scale");
       process.exit(0);
