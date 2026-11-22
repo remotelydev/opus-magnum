@@ -55,6 +55,8 @@ pnpm --filter horarium seed:demo
 - Health: http://127.0.0.1:8790/health
 - Log in: `POST /api/auth/login` with `{"login","password"}`. The response has a token (send as `Authorization: Bearer …`) and sets an HttpOnly `session` cookie for the browser UI.
 
+Patient registration on the clinic iPads (`/rejestracja`, no staff login on the tablet): see [docs/registration-ipad.md](docs/registration-ipad.md).
+
 ## Preview (demo data only)
 
 The Mac keeps a local preview at http://127.0.0.1:8791 that follows the most recently updated open pull request by itself (or `main` when none is open). A launchd job runs `preview/watch.sh` every 2 minutes: it asks GitHub for the newest open PR, and when its commit changed, checks it out in its own clone (`.preview/src`, never your working copy), rebuilds the Docker image and shows a macOS notification when it is ready. The preview has its own database with made-up demo data (`preview/start.sh` seeds it) and never touches the clinic database: real patient data stays on the clinic server.
@@ -104,6 +106,10 @@ Without `TEST_DATABASE_URL` the API tests are skipped. CI runs them against a Po
 | GET | `/api/patients?q=` (name prefix or phone; no notes or medical flags), `/api/patients/:id` (full card with visits) | any login |
 | GET | `/api/patients/:id/history` (change log of the patient and their visits) | admin |
 | POST / PATCH | `/api/patients`, `/api/patients/:id` | admin, reception |
+| GET | `/api/kiosk/state`, POST `/api/kiosk/submissions` (registration form on a paired iPad, device cookie only) | paired tablet |
+| POST | `/api/kiosk/pair`, `/api/kiosk/unpair` (staff login and password typed on the tablet) | admin, reception |
+| GET / DELETE | `/api/intake?status=`, `/api/intake/:id`; POST `/api/intake/:id/accept` `{patientId?}` (new card or attach) | admin, reception |
+| GET / DELETE | `/api/kiosk-devices`, `/api/kiosk-devices/:id` (paired tablets, revoke) | admin, reception |
 | GET | `/api/schedules?site=&from=&to=` | any login |
 | POST / DELETE | `/api/schedules`, `/api/schedules/:id` | admin, reception |
 | GET | `/api/appointments?site=&from=&to=[&staffId=]` (max 42 days) | any login |

@@ -15,6 +15,8 @@ interface Props {
   canSeeHistory: boolean;
   /** Jump to the calendar on the day and site of a visit. */
   onOpenDay: (site: string, date: string) => void;
+  /** Open straight on this patient's card (e.g. just created from a tablet registration). */
+  initialPatientId?: number | null;
 }
 
 const dateFmt = new Intl.DateTimeFormat("pl-PL", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" });
@@ -22,13 +24,13 @@ const formatDate = (iso: string) => dateFmt.format(new Date(`${iso.slice(0, 10)}
 
 const PAGE_SIZE = 25;
 
-export function PatientsPage({ sites, staff, canEdit, canSeeHistory, onOpenDay }: Props) {
+export function PatientsPage({ sites, staff, canEdit, canSeeHistory, onOpenDay, initialPatientId }: Props) {
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<PatientPage | null>(null);
   const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState<number | "new" | null>(null);
+  const [selected, setSelected] = useState<number | "new" | null>(initialPatientId ?? null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 

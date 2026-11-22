@@ -5,6 +5,7 @@ import {
   CalendarDaysIcon,
   ChevronDoubleLeftIcon,
   ChevronDoubleRightIcon,
+  ClipboardDocumentListIcon,
   MoonIcon,
   SunIcon,
   ClockIcon,
@@ -17,7 +18,7 @@ import type { ComponentType, ReactNode, SVGProps } from "react";
 import type { User } from "../lib/api.ts";
 import { useTheme } from "./ThemeToggle.tsx";
 
-export type View = "calendar" | "patients" | "services" | "staff" | "schedule" | "opening";
+export type View = "calendar" | "patients" | "intake" | "services" | "staff" | "schedule" | "opening";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -55,6 +56,7 @@ export function Sidebar({
   const items: Array<{ id: View; label: string; icon: Icon }> = [
     { id: "calendar", label: "Terminarz", icon: CalendarDaysIcon },
     { id: "patients", label: "Pacjenci", icon: UsersIcon },
+    ...(user.role !== "doctor" ? [{ id: "intake" as const, label: "Rejestracje", icon: ClipboardDocumentListIcon }] : []),
   ];
   const admin = user.role === "admin";
   const settings: Array<{ id: View; label: string; icon: Icon }> = [
