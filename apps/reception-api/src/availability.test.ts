@@ -3,12 +3,13 @@ import { describe, it } from "node:test";
 import { agentAvailabilityQuery } from "./agent.js";
 import { findFreeSlots, slotLabel, type VersumCalendar } from "./availability.js";
 import { loadConfig } from "./config.js";
+import { toVoiceLocation } from "./script.js";
 
 const config = loadConfig();
 const withoutAllowlist = (id: string) => {
   const location = config.locations.find((item) => item.id === id);
   assert.ok(location);
-  return { ...location, versumEmployeeIds: undefined, versumHygieneCalendarIds: [9], versumNames: { "1": "Anna Trumpus" } };
+  return { ...toVoiceLocation(location), versumEmployeeIds: undefined, versumHygieneCalendarIds: [9], versumNames: { "1": "Anna Trumpus" } };
 };
 const turek = withoutAllowlist("turek");
 const poddebice = withoutAllowlist("poddebice");

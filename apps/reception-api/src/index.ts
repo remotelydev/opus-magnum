@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import { findLocation, loadConfig } from "./config.js";
 import { loadLocalEnv } from "./env.js";
+import { toVoiceLocation } from "./script.js";
 import { agentAvailabilityQuery, agentTicketBody, hoursAnswer, isValidToolSecret } from "./agent.js";
 import { findFreeSlots, loadVersumCalendar, type VersumCalendar } from "./availability.js";
 import { getCachedPricelist } from "./prismic.js";
@@ -360,7 +361,7 @@ app.register(async (agentScope) => {
     if (!location) {
       return reply.code(404).send({ error: "unknown_location" });
     }
-    return hoursAnswer(config, location);
+    return hoursAnswer(config, toVoiceLocation(location));
   });
 
   agentScope.get<{ Params: { site: string }; Querystring: Record<string, string | undefined> }>(
@@ -377,7 +378,7 @@ app.register(async (agentScope) => {
         requestLog(error);
         return reply.code(503).send({ error: "no_versum_export" });
       }
-      return findFreeSlots(calendar, location, agentAvailabilityQuery(request.query), config.timezone);
+      return findFreeSlots(calendar, toVoiceLocation(location), agentAvailabilityQuery(request.query), config.timezone);
     },
   );
 

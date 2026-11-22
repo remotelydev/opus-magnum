@@ -8,11 +8,13 @@ import {
   isValidToolSecret,
 } from "./agent.js";
 import { loadConfig } from "./config.js";
+import { toVoiceLocation } from "./script.js";
 import { buildDevTicket } from "./whatsapp.js";
 
 const config = loadConfig();
-const turek = config.locations.find((item) => item.id === "turek");
-assert.ok(turek);
+const turekConfig = config.locations.find((item) => item.id === "turek");
+assert.ok(turekConfig);
+const turek = toVoiceLocation(turekConfig);
 
 describe("agent tools", () => {
   it("only accepts the exact tool secret", () => {

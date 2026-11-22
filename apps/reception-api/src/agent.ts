@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import type { AppConfig, LocationConfig } from "./config.js";
+import type { AppConfig } from "./config.js";
 import {
   DAY_PARTS,
   VISIT_KINDS,
@@ -8,7 +8,14 @@ import {
   type VisitKind,
 } from "./availability.js";
 import { isClosedDate } from "./holidays.js";
-import { hoursSummary, isOpenAt, nextOpenLabel, noticeLine, spokenName } from "./script.js";
+import {
+  hoursSummary,
+  isOpenAt,
+  nextOpenLabel,
+  noticeLine,
+  toVoiceLocation,
+  type VoiceLocation,
+} from "./script.js";
 import { TICKET_CATEGORIES, type DevTicketBody } from "./whatsapp.js";
 
 export const HOURS_TOOL = "sprawdz_godziny";
@@ -59,13 +66,13 @@ export interface HoursAnswer {
 
 export function hoursAnswer(
   config: AppConfig,
-  location: LocationConfig,
+  location: VoiceLocation,
   now = new Date(),
 ): HoursAnswer {
   const closedDates = location.closedDates ?? [];
   const openNow = isOpenAt(location.hours, now, config.timezone, closedDates);
   return {
-    site: spokenName(location),
+    site: location.name,
     now: warsawTime(now, config.timezone),
     openNow,
     closedToday: isClosedDate(warsawDate(now, config.timezone), closedDates),
@@ -110,19 +117,20 @@ export function agentAvailabilityQuery(
   return { durationMinutes: minutes[kind], kind, part, fromDate, employeeId };
 }
 
-export function agentFirstMessage(location: LocationConfig): string {
+export function agentFirstMessage(location: VoiceLocation): string {
   return noticeLine(location);
 }
 
-export function agentPrompt(config: AppConfig, location: LocationConfig): string {
+export function agentPrompt(config: AppConfig, location: VoiceLocation): string {
   const others = config.locations
     .filter((item) => item.id !== location.id)
-    .map((item) => `- ${spokenName(item)}: ${item.address}, telefon ${item.phone}.`)
+    .map((item) => toVoiceLocation(item))
+    .map((item) => `- ${item.name}: ${item.address}, telefon ${item.phone}.`)
     .join("\n");
-  return `Jesteś asystentem AI recepcji gabinetu stomatologicznego ${spokenName(location)}. Rozmawiasz przez telefon, wyłącznie po polsku, uprzejmie i krótko: jedno lub dwa zdania naraz. Zwracaj się per Pan/Pani.
+  return `Jesteś asystentem AI recepcji gabinetu stomatologicznego ${location.name}. Rozmawiasz przez telefon, wyłącznie po polsku, uprzejmie i krótko: jedno lub dwa zdania naraz. Zwracaj się per Pan/Pani.
 
 # Gabinet
-- ${spokenName(location)}: ${location.address}, telefon ${location.phone}.
+- ${location.name}: ${location.address}, telefon ${location.phone}.
 - Godziny: ${hoursSummary(location.hours)}. W święta państwowe gabinet jest nieczynny.
 ${others ? `\nInne gabinety:\n${others}\n` : ""}
 # Zasady

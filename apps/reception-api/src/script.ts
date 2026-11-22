@@ -1,4 +1,9 @@
 import type { AppConfig, LocationConfig, DayHours, WeekHours } from "./config.js";
+
+export type VoiceLocation = Omit<LocationConfig, "name"> & {
+  readonly voice: true;
+  readonly name: string;
+};
 import { isClosedDate } from "./holidays.js";
 
 export type Intent = "hours" | "book" | "emergency" | "human" | "other";
@@ -177,16 +182,17 @@ export function nextOpenLabel(
   return "w godzinach otwarcia";
 }
 
-export function spokenName(location: Pick<LocationConfig, "name">): string {
-  return location.name.replace(/\+/g, "").replace(/\s+/g, " ").trim();
+export function toVoiceLocation(location: LocationConfig): VoiceLocation {
+  const name = location.name.replace(/\+/g, "").replace(/\s+/g, " ").trim();
+  return { ...location, name, voice: true };
 }
 
-export function noticeLine(location: LocationConfig): string {
-  return `Dzień dobry, tu ${spokenName(location)}. Jestem asystentem AI. Rozmowa może być nagrywana na potrzeby jakości obsługi. Jeśli się Państwo nie zgadzają, proszę powiedzieć: nie zgadzam się.`;
+export function noticeLine(location: VoiceLocation): string {
+  return `Dzień dobry, tu ${location.name}. Jestem asystentem AI. Rozmowa może być nagrywana na potrzeby jakości obsługi. Jeśli się Państwo nie zgadzają, proszę powiedzieć: nie zgadzam się.`;
 }
 
-function hoursLine(location: LocationConfig): string {
-  return `${spokenName(location)}, ${location.address}. ${hoursSummary(location.hours)}. Telefon ${location.phone}.`;
+function hoursLine(location: VoiceLocation): string {
+  return `${location.name}, ${location.address}. ${hoursSummary(location.hours)}. Telefon ${location.phone}.`;
 }
 
 function bookingLine(): string {
@@ -194,10 +200,11 @@ function bookingLine(): string {
 }
 
 export function reply(config: AppConfig, input: ScriptInput): ScriptResult {
-  const location = config.locations.find((item) => item.id === input.locationId);
-  if (!location) {
+  const found = config.locations.find((item) => item.id === input.locationId);
+  if (!found) {
     throw new Error(`unknown location ${input.locationId}`);
   }
+  const location = toVoiceLocation(found);
 
   const transcribe = input.consent !== "no";
   const closedDates = location.closedDates ?? [];

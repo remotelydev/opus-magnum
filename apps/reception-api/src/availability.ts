@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { LocationConfig, WeekHours } from "./config.js";
+import type { WeekHours } from "./config.js";
 import { isClosedDate } from "./holidays.js";
-import { spokenName } from "./script.js";
+import type { VoiceLocation } from "./script.js";
 
 const DEFAULT_EXPORT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "versum-export");
 const MINUTE = 60_000;
@@ -106,7 +106,7 @@ function plain(text: string): string {
 
 export function siteEmployees(
   calendar: VersumCalendar,
-  location: LocationConfig,
+  location: VoiceLocation,
   kind: VisitKind = "wizyta",
 ): VersumEmployee[] {
   if (kind === "higienizacja") {
@@ -158,7 +158,7 @@ function zonedInstant(date: string, time: string, timeZone: string): number {
 }
 
 export function openingHourWindows(
-  location: LocationConfig,
+  location: VoiceLocation,
   employeeId: number,
   now: Date,
   timeZone: string,
@@ -193,7 +193,7 @@ function inDayPart(instant: Date, durationMinutes: number, part: DayPart, timeZo
 
 export function findFreeSlots(
   calendar: VersumCalendar,
-  location: LocationConfig,
+  location: VoiceLocation,
   query: AvailabilityQuery,
   timeZone: string,
   now = new Date(),
@@ -271,7 +271,7 @@ export function findFreeSlots(
   candidates.sort((a, b) => a.start.localeCompare(b.start) || a.employeeId - b.employeeId);
   const stale = now.getTime() - Date.parse(calendar.exportedAt) > STALE_AFTER_HOURS * 60 * MINUTE;
   return {
-    site: spokenName(location),
+    site: location.name,
     slots: candidates.slice(0, limit),
     exportedAt: calendar.exportedAt,
     stale,

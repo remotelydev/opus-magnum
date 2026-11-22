@@ -10,6 +10,7 @@ import {
   TICKET_TOOL,
 } from "../src/agent.js";
 import { findLocation, loadConfig } from "../src/config.js";
+import { toVoiceLocation } from "../src/script.js";
 import { loadLocalEnv } from "../src/env.js";
 
 loadLocalEnv();
@@ -179,10 +180,10 @@ const agent = {
   name: `${location.name} (test)`,
   conversation_config: {
     agent: {
-      first_message: agentFirstMessage(location),
+      first_message: agentFirstMessage(toVoiceLocation(location)),
       language: "pl",
       prompt: {
-        prompt: agentPrompt(config, location),
+        prompt: agentPrompt(config, toVoiceLocation(location)),
         llm,
         tool_ids: [state.hoursToolId, state.availabilityToolId, state.ticketToolId],
       },
