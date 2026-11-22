@@ -52,7 +52,7 @@ interface CalendarPart {
   deleted_at: string | null;
   description: string | null;
   info_from_customer?: string | null;
-  tags?: (string | { name: string })[];
+  tags?: VersumTag[];
   payments?: { payment_method: string; payment_method_name?: string; price: number }[];
   created_at?: string;
   updated_at?: string;
@@ -67,7 +67,7 @@ interface ScreenEvent {
   deleted_at: string | null;
   description: string | null;
   info_from_customer?: string | null;
-  tags?: (string | { name: string })[];
+  tags?: VersumTag[];
   services: { name: string; employees: { id: number; name: string }[] }[];
   payments?: { payment_method: string; price: number }[];
   created_at?: string;
@@ -89,7 +89,9 @@ export interface Visit {
 }
 
 const PAYMENT_LABELS: Record<string, string> = { cash: "gotówka", transfer: "przelew", card: "karta" };
-const tagName = (t: string | { name: string }) => (typeof t === "string" ? t : t.name).trim();
+/** Tags come as names in a visit's full JSON and as { title, full_title } in the calendar's. */
+type VersumTag = string | { id?: number; name?: string; title?: string; full_title?: string };
+const tagName = (t: VersumTag) => (typeof t === "string" ? t : (t.name ?? t.title ?? t.full_title ?? "")).trim();
 const blankToNull = (s: string | null | undefined) => (s && s.trim() ? s : null);
 
 /** Turn one exported record into a visit, or null when it carries no usable data. */

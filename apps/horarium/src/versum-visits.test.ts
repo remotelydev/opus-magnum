@@ -29,7 +29,7 @@ function calendarVisit(id: number, over: Record<string, unknown> = {}): Exported
         canceled: false,
         deleted_at: null,
         description: "Wizyta planowa\n36 wyp. kompozyt",
-        tags: [{ name: "pacjent potwierdzony" }, { name: "sms " }],
+        tags: [{ id: 137504, title: "pacjent potwierdzony", full_title: "pacjent potwierdzony" }, { id: 516714, title: "sms ", full_title: "sms " }],
         payments: [{ payment_method: "cash", payment_method_name: "gotówka", price: 400 }],
         ...over,
       },
@@ -76,7 +76,7 @@ test("normalizeVisit maps Versum statuses and tags", () => {
   assert.equal(done.payments[0].amount, 400);
   assert.equal(done.staff[0].name, "Jan  Kowalski Turek");
 
-  assert.equal(normalizeVisit(calendarVisit(2, { tags: [{ name: "odwołano" }] }), names)!.status, "cancelled");
+  assert.equal(normalizeVisit(calendarVisit(2, { tags: [{ id: 521798, title: "odwołano" }] }), names)!.status, "cancelled");
   assert.equal(normalizeVisit(calendarVisit(3, { finalized: false }), names)!.status, "confirmed");
   assert.equal(normalizeVisit(calendarVisit(4, { finalized: false, tags: [] }), names)!.status, "booked");
   assert.equal(normalizeVisit(deletedVisit(5), names)!.status, "deleted");
