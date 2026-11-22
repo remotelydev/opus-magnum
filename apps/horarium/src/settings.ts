@@ -123,6 +123,21 @@ export function overlappingDay(days: PatternDay[]): number | null {
   return null;
 }
 
+/**
+ * A person works at one clinic a day: Turek and Poddębice on different days are fine, both on one day
+ * are not. Returns the first weekday that names two clinics. ("calendar" columns such as Higienizacja
+ * are chairs, not people, and are not checked.)
+ */
+export function twoSitesOneDay(days: Pick<PatternDay, "weekday" | "siteId">[]): number | null {
+  const site = new Map<number, string>();
+  for (const d of [...days].sort((a, b) => a.weekday - b.weekday)) {
+    const seen = site.get(d.weekday);
+    if (seen && seen !== d.siteId) return d.weekday;
+    site.set(d.weekday, d.siteId);
+  }
+  return null;
+}
+
 function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 }
@@ -382,8 +397,10 @@ export function registerSettings(app: FastifyInstance, db: Db, guards: Guards, p
       checkRanges(days, (d) => d.starts, (d) => d.ends);
       const clash = overlappingDay(days);
       if (clash) throw badRequest(`${WEEKDAYS[clash - 1]}: godziny nachodzą na siebie.`);
-      const staff = await db.query("SELECT 1 FROM staff WHERE id = $1", [req.params.id]);
+      const staff = await db.query<{ kind: string }>("SELECT kind FROM staff WHERE id = $1", [req.params.id]);
       if (!staff.rowCount) return reply.code(404).send({ error: "Nie ma takiego pracownika." });
+      const split = staff.rows[0].kind === "person" ? twoSitesOneDay(days) : null;
+      if (split) throw badRequest(`${WEEKDAYS[split - 1]}: jednego dnia można pracować tylko w jednej klinice.`);
       await inTransaction(db, async (client) => {
         await client.query("DELETE FROM work_patterns WHERE staff_id = $1", [req.params.id]);
         for (const d of days) {
