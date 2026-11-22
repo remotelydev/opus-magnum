@@ -73,6 +73,49 @@ export interface Patient {
   medicalFlags: string[];
   notes: string | null;
   smsConsent: boolean;
+  /** "Opis" from Versum: a free note about the patient. */
+  description: string | null;
+  gender: "female" | "male" | null;
+  pesel: string | null;
+  cardNumber: string | null;
+  taxId: string | null;
+  street: string | null;
+  houseNumber: string | null;
+  unitNumber: string | null;
+  postalCode: string | null;
+  city: string | null;
+  emailConsent: boolean;
+  marketingConsent: boolean;
+}
+/** The card fields a search result lacks, as empty values (when the full card cannot be loaded). */
+export const EMPTY_PATIENT_FIELDS = {
+  email: null,
+  medicalFlags: [],
+  notes: null,
+  smsConsent: false,
+  description: null,
+  gender: null,
+  pesel: null,
+  cardNumber: null,
+  taxId: null,
+  street: null,
+  houseNumber: null,
+  unitNumber: null,
+  postalCode: null,
+  city: null,
+  emailConsent: false,
+  marketingConsent: false,
+} satisfies Omit<Patient, keyof PatientSummary>;
+/** Read-only details of a full card (mostly from the Versum import). */
+export interface PatientCardDetails {
+  province: string | null;
+  country: string | null;
+  nameDay: string | null;
+  groups: string[];
+  origin: string | null;
+  referredBy: { id: number; name: string } | null;
+  importedFrom: "versum" | null;
+  createdAt: string | null;
 }
 /** What the patient search returns: no notes or medical flags. */
 export type PatientSummary = Pick<Patient, "id" | "firstName" | "lastName" | "phone" | "birthDate">;
@@ -212,7 +255,7 @@ export const api = {
   searchPatients: (q: string) => request<PatientSummary[]>("GET", `/api/patients?${qs({ q, limit: 15 })}`),
   listPatients: (q: string, page: number, pageSize: number) =>
     request<PatientPage>("GET", `/api/patients/list?${qs({ q, page, pageSize })}`),
-  patient: (id: number) => request<Patient & { appointments: Appointment[] }>("GET", `/api/patients/${id}`),
+  patient: (id: number) => request<Patient & PatientCardDetails & { appointments: Appointment[] }>("GET", `/api/patients/${id}`),
   patientHistory: (id: number) => request<HistoryEntry[]>("GET", `/api/patients/${id}/history`),
   createPatient: (body: Partial<Patient>) => request<{ id: number }>("POST", "/api/patients", body),
   updatePatient: (id: number, body: Partial<Omit<Patient, "id">>) =>
