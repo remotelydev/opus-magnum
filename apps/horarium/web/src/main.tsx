@@ -2,7 +2,10 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { KioskApp } from "./kiosk/KioskApp.tsx";
+import { revealScrollbars } from "./lib/scrollbars.ts";
 import "./styles.css";
+
+revealScrollbars();
 
 // /rejestracja is the patient form on the clinic iPad: its own screen, no staff UI around it.
 const kiosk = /^\/rejestracja\/?$/.test(location.pathname);

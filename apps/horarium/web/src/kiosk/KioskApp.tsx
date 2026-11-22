@@ -77,7 +77,7 @@ export function KioskApp() {
 }
 
 function Centered({ children }: { children: ReactNode }) {
-  return <main className="flex min-h-full flex-col items-center justify-center bg-background p-6 text-center">{children}</main>;
+  return <main className="flex h-full flex-col items-center justify-center overflow-y-auto bg-background p-6 text-center">{children}</main>;
 }
 
 // --- the form ------------------------------------------------------------------------------
@@ -498,7 +498,7 @@ function PairScreen({ sites, onPaired }: { sites: Site[]; onPaired: () => void }
   const [name, setName] = useState("iPad poczekalnia");
   const field = "h-12 w-full rounded-lg border-2 border-input bg-surface px-3 text-[1rem] focus:border-primary focus:outline-none";
   return (
-    <main className="flex min-h-full items-center justify-center bg-background p-6">
+    <main className="flex h-full items-start justify-center overflow-y-auto bg-background p-6 sm:items-center">
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-7 shadow-sm">
         <h1 className="text-[1.4rem] font-bold">Uruchom tablet rejestracyjny</h1>
         <p className="mt-2 text-[0.95rem] text-muted-foreground">
