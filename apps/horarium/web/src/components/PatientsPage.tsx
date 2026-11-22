@@ -22,7 +22,7 @@ interface Props {
   /** Jump to the calendar on the day and site of a visit, with that visit open. */
   onOpenDay: (site: string, date: string, appointmentId: number) => void;
   /** Card to open straight away, e.g. from "Karta pacjenta" in the calendar's visit panel. */
-  initialPatient?: number | null;
+  initialPatientId?: number | null;
 }
 
 const dateFmt = new Intl.DateTimeFormat("pl-PL", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" });
@@ -38,14 +38,14 @@ export function PatientsPage({
   canEdit,
   canSeeHistory,
   onOpenDay,
-  initialPatient = null,
+  initialPatientId = null,
 }: Props) {
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [result, setResult] = useState<PatientPage | null>(null);
   const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState<number | "new" | null>(initialPatient);
+  const [selected, setSelected] = useState<number | "new" | null>(initialPatientId);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -219,7 +219,7 @@ function PatientCardView({
   canSeeHistory,
   onOpenDay,
   onChanged,
-}: Omit<Props, "onOpenDay" | "initialPatient"> & {
+}: Omit<Props, "onOpenDay" | "initialPatientId"> & {
   id: number;
   onOpenDay: Props["onOpenDay"];
   onChanged: (name: string) => void;
