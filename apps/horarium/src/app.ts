@@ -116,6 +116,7 @@ function appointmentRow(r: Record<string, unknown>) {
     source: r.source,
     notes: r.notes,
     treatmentNotes: r.treatment_notes ?? null,
+    tags: (r.tags as string[] | undefined) ?? [],
   };
 }
 
@@ -302,7 +303,22 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
       const visits = await db.query(`${APPOINTMENT_SELECT} WHERE a.patient_id = $1 ORDER BY a.starts_at DESC`, [
         req.params.id,
       ]);
-      return { ...patientRow(rows[0]), appointments: visits.rows.map(appointmentRow) };
+      const appointments: Record<string, unknown>[] = visits.rows.map(appointmentRow);
+      // Payments (amounts) only for admins.
+      if (req.user!.role === "admin" && appointments.length) {
+        const paid = await db.query(
+          `SELECT appointment_id, method, method_label, amount::float AS amount
+             FROM appointment_payments WHERE appointment_id = ANY($1) ORDER BY id`,
+          [appointments.map((a) => a.id)],
+        );
+        const byVisit = new Map<number, unknown[]>();
+        for (const p of paid.rows) {
+          if (!byVisit.has(p.appointment_id)) byVisit.set(p.appointment_id, []);
+          byVisit.get(p.appointment_id)!.push({ method: p.method, methodLabel: p.method_label, amount: p.amount });
+        }
+        for (const a of appointments) a.payments = byVisit.get(a.id as number) ?? [];
+      }
+      return { ...patientRow(rows[0]), appointments };
     },
   );
 
@@ -526,6 +542,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
       const { rows } = await db.query(
         `${APPOINTMENT_SELECT}
           WHERE ($1 = '${ALL_SITES}' OR a.site_id = $1) AND a.starts_at < $3 AND a.ends_at > $2 AND ($4::int IS NULL OR a.staff_id = $4)
+            AND a.status <> 'deleted'
           ORDER BY a.starts_at`,
         [site, from, to, staffId ?? null],
       );

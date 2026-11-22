@@ -287,7 +287,7 @@ type Queryable = Pick<Db, "query">;
 
 /** Empties every table the demo seed fills. Logins and sessions stay, so a signed-in browser stays signed in. */
 async function resetDemo(client: Queryable) {
-  await client.query(`TRUNCATE appointments, schedules, work_patterns, staff_sites, patients, services,
+  await client.query(`TRUNCATE appointment_payments, import_raw, appointments, schedules, work_patterns, staff_sites, patients, services,
                         opening_hours, opening_exceptions, import_refs, audit_log RESTART IDENTITY`);
   await client.query("UPDATE users SET staff_id = NULL");
   await client.query("DELETE FROM staff");
@@ -432,6 +432,7 @@ async function seedAll(client: Queryable) {
     ],
   );
   await demoTreatmentNotes(client);
+  await demoVersumHistory(client);
   return { staff: STAFF.length, services: SERVICES.length, patients: patientIds.length, visits: visits.length };
 }
 
@@ -453,6 +454,29 @@ async function demoTreatmentNotes(client: Pick<Db, "query">) {
   );
 }
 
+/** Made-up visits "from Versum" so the preview shows what the import brings: payments (admins see them),
+ *  tags and visits removed in Versum. Only past finished visits, and only once. */
+async function demoVersumHistory(client: Pick<Db, "query">) {
+  const done = await client.query("SELECT 1 FROM appointment_payments LIMIT 1");
+  if (done.rowCount) return;
+  await client.query(
+    `UPDATE appointments SET source = 'import',
+            tags = CASE WHEN id % 7 = 0 THEN ARRAY['pierwsza wizyta'] WHEN id % 7 = 1 THEN ARRAY['sms'] ELSE '{}' END
+      WHERE status = 'done' AND patient_id IS NOT NULL AND starts_at < now() - interval '7 days' AND id % 3 = 0`,
+  );
+  await client.query(
+    `INSERT INTO appointment_payments (appointment_id, method, method_label, amount, source)
+     SELECT id, CASE WHEN id % 4 = 0 THEN 'transfer' ELSE 'cash' END, CASE WHEN id % 4 = 0 THEN 'przelew' ELSE 'gotówka' END,
+            (ARRAY[150, 200, 300, 400, 450, 550, 800, 1500])[1 + (id % 8)], 'import'
+       FROM appointments WHERE source = 'import' AND status = 'done' AND id % 6 <> 0`,
+  );
+  // A few visits that were removed in Versum: history only, never in the calendar.
+  await client.query(
+    `UPDATE appointments SET status = 'deleted', treatment_notes = NULL
+      WHERE source = 'import' AND id % 41 = 0`,
+  );
+}
+
 const db = createPool();
 try {
   await migrate(db);
@@ -466,6 +490,7 @@ try {
     }
     if (rows[0].n >= SCALE.patients) {
       await demoTreatmentNotes(db);
+      await demoVersumHistory(db);
       console.log("demo data already at full scale, nothing to do");
       process.exit(0);
     }

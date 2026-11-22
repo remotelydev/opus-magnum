@@ -91,7 +91,13 @@ export interface HistoryEntry {
   changes: Record<string, unknown> | null;
   userName: string | null;
 }
-export type AppointmentStatus = "booked" | "confirmed" | "cancelled" | "no_show" | "done";
+/** "deleted" only comes from the Versum import: a visit removed there, kept for the history. */
+export type AppointmentStatus = "booked" | "confirmed" | "cancelled" | "no_show" | "done" | "deleted";
+export interface Payment {
+  method: string;
+  methodLabel: string | null;
+  amount: number;
+}
 export interface Appointment {
   id: number;
   siteId: string;
@@ -108,6 +114,10 @@ export interface Appointment {
   notes: string | null;
   /** The doctor's description of the treatment ("opis leczenia"). */
   treatmentNotes: string | null;
+  /** Labels from Versum ("pierwsza wizyta", "sms", ...). */
+  tags: string[];
+  /** Money taken for the visit; present only for admins, in the patient card. */
+  payments?: Payment[];
 }
 export interface ScheduleBlock {
   id: number;
