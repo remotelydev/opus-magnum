@@ -77,6 +77,19 @@ apps/horarium/preview/share.sh
 apps/horarium/preview/share.sh stop
 ```
 
+## Patients from Versum
+
+Two steps, so patient data never passes through the cloud or this repository:
+
+1. **Export** in a browser where someone is logged in to the Versum panel: `scripts/versum/extract-patients.js` runs in that tab, reads every patient card (all fields of the edit form plus "Data dodania" and "Ostatnia modyfikacja"), keeps them in the browser's IndexedDB (an interrupted run continues where it stopped) and saves one `versum-pacjenci-YYYY-MM-DD.ndjson` file to Downloads. Read-only: it only opens pages.
+2. **Import** on the clinic machine, in one transaction, safe to repeat (it updates the cards from the earlier run, so do the final run before reception edits cards in Horarium):
+
+```bash
+pnpm --filter horarium import:versum-patients /path/to/versum-pacjenci-2026-11-22.ndjson
+```
+
+Each patient is linked in `import_refs` (`versum`, `patient`, Versum customer id), which the visit-history import uses. Versum's "Opis" goes to `description`; health checkboxes, allergies and other diseases to `medical_flags`; the whole source record is kept in `import_data`. The demo data includes a dozen made-up cards imported this way.
+
 ## Tests
 
 Tests need an empty database they can wipe:

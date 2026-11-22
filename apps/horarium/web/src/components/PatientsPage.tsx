@@ -2,11 +2,11 @@ import { Button } from "@opus-magnum/dentaplus-ui/components/button";
 import { StatusBadge } from "@opus-magnum/dentaplus-ui/components/status";
 import { Input, Label } from "@opus-magnum/dentaplus-ui/components/field";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { api, type Appointment, type Patient, type PatientPage, type Site, type Staff } from "../lib/api.ts";
+import { api, type Appointment, type Patient, type PatientCardDetails, type PatientPage, type Site, type Staff } from "../lib/api.ts";
 import { formatMinutes, toClinicTime } from "../lib/time.ts";
 import { PatientHistory } from "./PatientHistory.tsx";
 
-type PatientCard = Patient & { appointments: Appointment[] };
+type PatientCard = Patient & PatientCardDetails & { appointments: Appointment[] };
 
 interface Props {
   sites: Site[];
@@ -283,6 +283,12 @@ function PatientCardView({
           {card.birthDate && <p>Data urodzenia: {formatDate(card.birthDate)}</p>}
           {card.medicalFlags.length > 0 && <p className="text-destructive">Uwaga: {card.medicalFlags.join(", ")}</p>}
           {card.notes && <p className="text-muted-foreground">{card.notes}</p>}
+          {card.description && (
+            <p className="whitespace-pre-line">
+              <span className="font-medium">Opis: </span>
+              {card.description}
+            </p>
+          )}
         </div>
         {canEdit && (
           <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
@@ -290,6 +296,8 @@ function PatientCardView({
           </Button>
         )}
       </section>
+
+      <PatientDetails card={card} />
 
       <section className="space-y-2">
         <h2 className="text-sm font-medium">Nadchodzące wizyty</h2>
@@ -311,6 +319,57 @@ function PatientCardView({
   );
 }
 
+const MONTHS = ["stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca", "lipca", "sierpnia", "września", "października", "listopada", "grudnia"];
+
+/** Personal details, consents and where the card came from. Rows without a value are left out. */
+function PatientDetails({ card }: { card: PatientCard }) {
+  const address = [
+    [card.street, [card.houseNumber, card.unitNumber].filter(Boolean).join("/")].filter(Boolean).join(" "),
+    [card.postalCode, card.city].filter(Boolean).join(" "),
+    card.province,
+    card.country && card.country !== "PL" ? card.country : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const nameDay = card.nameDay ? `${Number(card.nameDay.slice(3))} ${MONTHS[Number(card.nameDay.slice(0, 2)) - 1]}` : null;
+  const consents = [
+    card.smsConsent && "przypomnienia SMS",
+    card.emailConsent && "przypomnienia e-mail",
+    card.marketingConsent && "informacje handlowe",
+  ].filter(Boolean);
+  const rows: [string, string | null][] = [
+    ["Płeć", card.gender === "female" ? "kobieta" : card.gender === "male" ? "mężczyzna" : null],
+    ["PESEL", card.pesel],
+    ["Numer karty", card.cardNumber],
+    ["Adres", address || null],
+    ["NIP", card.taxId],
+    ["Imieniny", nameDay],
+    ["Grupy", card.groups.length ? card.groups.join(", ") : null],
+    ["Pochodzenie", card.origin],
+    ["Polecił(a)", card.referredBy?.name ?? null],
+    ["Zgody", consents.length ? consents.join(", ") : "brak"],
+    [
+      card.importedFrom === "versum" ? "Karta z Versum, dodana" : "Karta założona",
+      card.createdAt ? formatDate(toClinicTime(card.createdAt).date) : null,
+    ],
+  ];
+  return (
+    <section className="space-y-2">
+      <h2 className="text-sm font-medium">Dane osobowe</h2>
+      <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
+        {rows
+          .filter(([, value]) => value)
+          .map(([label, value]) => (
+            <div key={label} className="contents">
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+      </dl>
+    </section>
+  );
+}
+
 function PatientForm({
   patient,
   onCancel,
@@ -329,6 +388,18 @@ function PatientForm({
     medicalFlags: patient?.medicalFlags.join(", ") ?? "",
     notes: patient?.notes ?? "",
     smsConsent: patient?.smsConsent ?? false,
+    description: patient?.description ?? "",
+    gender: patient?.gender ?? "",
+    pesel: patient?.pesel ?? "",
+    cardNumber: patient?.cardNumber ?? "",
+    taxId: patient?.taxId ?? "",
+    street: patient?.street ?? "",
+    houseNumber: patient?.houseNumber ?? "",
+    unitNumber: patient?.unitNumber ?? "",
+    postalCode: patient?.postalCode ?? "",
+    city: patient?.city ?? "",
+    emailConsent: patient?.emailConsent ?? false,
+    marketingConsent: patient?.marketingConsent ?? false,
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -349,7 +420,20 @@ function PatientForm({
         .filter(Boolean),
       notes: form.notes.trim() || null,
       smsConsent: form.smsConsent,
+      description: form.description.trim() || null,
+      gender: (form.gender || null) as Patient["gender"],
+      pesel: form.pesel.replace(/\s/g, "") || null,
+      cardNumber: form.cardNumber.trim() || null,
+      taxId: form.taxId.trim() || null,
+      street: form.street.trim() || null,
+      houseNumber: form.houseNumber.trim() || null,
+      unitNumber: form.unitNumber.trim() || null,
+      postalCode: form.postalCode.trim() || null,
+      city: form.city.trim() || null,
+      emailConsent: form.emailConsent,
+      marketingConsent: form.marketingConsent,
     };
+    if (body.pesel && !/^\d{11}$/.test(body.pesel)) return setError("PESEL ma 11 cyfr.");
     setBusy(true);
     setError(null);
     try {
@@ -371,7 +455,10 @@ function PatientForm({
     }
   };
 
-  const field = (key: "firstName" | "lastName" | "phone" | "email" | "birthDate", label: string, type = "text") => (
+  type TextKey =
+    | "firstName" | "lastName" | "phone" | "email" | "birthDate" | "pesel" | "cardNumber" | "taxId"
+    | "street" | "houseNumber" | "unitNumber" | "postalCode" | "city";
+  const field = (key: TextKey, label: string, type = "text") => (
     <div className="space-y-1">
       <Label htmlFor={`pf-${key}`}>{label}</Label>
       <Input id={`pf-${key}`} type={type} value={form[key]} onChange={(e) => set(key)(e.target.value)} />
@@ -387,6 +474,39 @@ function PatientForm({
         {field("phone", "Telefon", "tel")}
         {field("email", "E-mail", "email")}
         {field("birthDate", "Data urodzenia", "date")}
+        <div className="space-y-1">
+          <Label htmlFor="pf-gender">Płeć</Label>
+          <select
+            id="pf-gender"
+            value={form.gender}
+            onChange={(e) => set("gender")(e.target.value)}
+            className="h-9 w-full rounded-md border border-input bg-surface px-3 text-sm"
+          >
+            <option value="">nie podano</option>
+            <option value="female">kobieta</option>
+            <option value="male">mężczyzna</option>
+          </select>
+        </div>
+        {field("pesel", "PESEL")}
+        {field("cardNumber", "Numer karty")}
+        {field("street", "Ulica")}
+        <div className="grid grid-cols-2 gap-3">
+          {field("houseNumber", "Nr domu")}
+          {field("unitNumber", "Nr lokalu")}
+        </div>
+        {field("postalCode", "Kod pocztowy")}
+        {field("city", "Miasto")}
+        {field("taxId", "NIP")}
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="pf-description">Opis</Label>
+        <textarea
+          id="pf-description"
+          rows={3}
+          value={form.description}
+          onChange={(e) => set("description")(e.target.value)}
+          className="w-full rounded-md border border-input bg-surface px-3 py-2 text-sm"
+        />
       </div>
       <div className="space-y-1">
         <Label htmlFor="pf-flags">Flagi medyczne (po przecinku, np. alergia na penicylinę, cukrzyca)</Label>
@@ -405,6 +525,14 @@ function PatientForm({
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={form.smsConsent} onChange={(e) => set("smsConsent")(e.target.checked)} />
         Zgoda na przypomnienia SMS
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={form.emailConsent} onChange={(e) => set("emailConsent")(e.target.checked)} />
+        Zgoda na przypomnienia e-mail
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={form.marketingConsent} onChange={(e) => set("marketingConsent")(e.target.checked)} />
+        Zgoda na informacje handlowe (SMS, e-mail)
       </label>
       {error && (
         <p role="alert" className="text-sm text-destructive">
