@@ -12,6 +12,7 @@ import {
 import { findLocation, loadConfig } from "../src/config.js";
 import { toVoiceLocation } from "../src/script.js";
 import { loadLocalEnv } from "../src/env.js";
+import { NAME_MAX_LENGTH, SLOT_MAX_LENGTH } from "../src/whatsapp.js";
 
 loadLocalEnv();
 
@@ -138,7 +139,7 @@ const ticketTool = {
       description: "Dane zgłoszenia. Bez powodu wizyty i bez objawów.",
       required: ["name", "phone", "category", "slot", "urgent"],
       properties: {
-        name: { type: "string", description: "Imię i nazwisko pacjenta." },
+        name: { type: "string", description: `Imię i nazwisko pacjenta. Najwyżej ${NAME_MAX_LENGTH} znaków.` },
         phone: {
           type: "string",
           description: "Numer telefonu pacjenta, same cyfry, z +48 jeśli podany.",
@@ -150,7 +151,7 @@ const ticketTool = {
         },
         slot: {
           type: "string",
-          description: "Wybrany termin z lekarzem, np. 'wt 27.10 10:30, Anna Nowak', albo preferowany dzień i pora dnia. Najwyżej 80 znaków.",
+          description: `Wybrany termin z lekarzem, np. 'wt 27.10 10:30, Anna Nowak', albo preferowany dzień i pora dnia. Najwyżej ${SLOT_MAX_LENGTH} znaków.`,
         },
         urgent: { type: "boolean", description: "Czy sprawa jest pilna." },
         returning: {
