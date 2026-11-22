@@ -1,6 +1,6 @@
 # Database schema
 
-Source of truth: `migrations/` (`001_init.sql`, `002_settings.sql`). PostgreSQL 16.
+Source of truth: `migrations/` (`001_init.sql` onwards). PostgreSQL 16.
 
 ```mermaid
 erDiagram
@@ -11,6 +11,7 @@ erDiagram
     staff ||--o{ appointments : "sees"
     sites ||--o{ appointments : "at"
     patients ||--o{ appointments : "books"
+    patients |o--o{ patients : "referred"
     services ||--o{ appointments : "for"
     users ||--o{ appointments : "created by"
     users ||--o{ sessions : "logged in"
@@ -75,6 +76,25 @@ erDiagram
         text_array medical_flags
         text notes
         bool sms_consent
+        text description "Opis (Versum)"
+        text gender "female | male"
+        text pesel
+        text card_number
+        text tax_id "NIP"
+        text street
+        text house_number
+        text unit_number
+        text postal_code
+        text city
+        text province
+        text country "ISO 3166-1, e.g. PL"
+        text name_day "MM-DD"
+        text_array patient_groups
+        text origin
+        int referred_by_patient_id FK
+        bool email_consent
+        bool marketing_consent
+        jsonb import_data "source record"
     }
     schedules {
         serial id PK
@@ -141,4 +161,5 @@ Rules the database enforces:
 - `price_max >= price_min`, `ends_at > starts_at`, durations above zero.
 - Opening hours and work patterns are clinic-local times (Europe/Warsaw); a weekday without an `opening_hours` row is closed.
 - `work_patterns` is the template; `schedules` holds the actual blocks the calendar shows. Generating from the pattern rewrites only `work` blocks, never absences.
-- `import_refs` is used only by a one-off data import, so it can run again without duplicates. The app never reads it; it can be dropped after the move.
+- `import_refs` is used only by a one-off data import, so it can run again without duplicates. The app never reads it; it can be dropped after the move. Versum patients are `('versum', 'patient', <Versum customer id>)`.
+- `patients.import_data` keeps the whole Versum record of an imported card; the app only reports that the card came from Versum.

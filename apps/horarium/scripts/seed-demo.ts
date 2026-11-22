@@ -11,6 +11,8 @@
 import { createUser } from "../src/auth.js";
 import { createPool, migrate, type Db } from "../src/db.js";
 import { STAFF_PALETTE } from "../src/settings.js";
+import { importVersumPatients } from "../src/versum-patients.js";
+import { demoVersumPatients } from "./versum/demo-patients.js";
 
 const DEMO_PASSWORD = process.env.CLINIC_PASSWORD ?? "demo-demo-demo";
 const DEMO_ADMIN_NAME = "Administrator (demo)";
@@ -294,6 +296,27 @@ async function resetDemo(client: Queryable) {
   await client.query("ALTER SEQUENCE staff_id_seq RESTART");
 }
 
+/**
+ * A dozen made-up cards through the real Versum importer, so the demo shows imported patients (Opis,
+ * address, PESEL, consents, referrals). Added once, also to a demo database filled before the importer.
+ */
+async function addVersumDemo(db: Db) {
+  const done = await db.query("SELECT 1 FROM import_refs WHERE source = 'versum' AND entity = 'patient' LIMIT 1");
+  if (done.rowCount) return;
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await importVersumPatients(client, demoVersumPatients());
+    await client.query("COMMIT");
+    console.log(`demo data: ${result.created} patients imported from a made-up Versum export`);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function seedAll(client: Queryable) {
   const clock = (
     await client.query<{ today: string; minute: number }>(
@@ -491,7 +514,8 @@ try {
     if (rows[0].n >= SCALE.patients) {
       await demoTreatmentNotes(db);
       await demoVersumHistory(db);
-      console.log("demo data already at full scale, nothing to do");
+      await addVersumDemo(db);
+      console.log("demo data already at full scale");
       process.exit(0);
     }
     console.log(`demo data: replacing the small demo set (${rows[0].n} patients)`);
@@ -514,6 +538,7 @@ try {
     }
   })();
 
+  await addVersumDemo(db);
   for (const [login, name, role] of [["recepcja", "Recepcja (demo)", "reception"], ["admin", DEMO_ADMIN_NAME, "admin"]] as const) {
     const has = await db.query("SELECT 1 FROM users WHERE login = $1", [login]);
     if (!has.rowCount) await createUser(db, { login, name, role, password: DEMO_PASSWORD });

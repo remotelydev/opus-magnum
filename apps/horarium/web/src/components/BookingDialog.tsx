@@ -1,7 +1,7 @@
 import { Button } from "@opus-magnum/dentaplus-ui/components/button";
 import { Input, Label, Select } from "@opus-magnum/dentaplus-ui/components/field";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { api, type Patient, type PatientSummary, type Service, type Site, type Staff } from "../lib/api.ts";
+import { api, EMPTY_PATIENT_FIELDS, type Patient, type PatientSummary, type Service, type Site, type Staff } from "../lib/api.ts";
 import { ALL_SITES } from "../lib/sites.ts";
 import { addDays, formatMinutes, fromClinicTime, parseHhmm, toClinicTime } from "../lib/time.ts";
 import { Modal } from "@opus-magnum/dentaplus-ui/components/modal";
@@ -354,7 +354,7 @@ function PatientPicker({
                   api
                     .patient(p.id)
                     .then(onPick)
-                    .catch(() => onPick({ ...p, email: null, medicalFlags: [], notes: null, smsConsent: false }))
+                    .catch(() => onPick({ ...p, ...EMPTY_PATIENT_FIELDS }))
                 }
               >
                 {p.lastName} {p.firstName} <span className="text-muted-foreground">{p.phone}</span>
