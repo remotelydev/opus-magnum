@@ -15,7 +15,7 @@
   // Versum answers 429 (Too Many Requests) and locks the account for a while when pushed: in Nov 2026
   // four parallel requests (~5 per second) tripped it within minutes. So one request at a time, at
   // least GAP_MS apart, and on a 429 everything pauses, longer each time.
-  const GAP_MS = 1200;
+  let GAP_MS = 1200;
   const salon = location.pathname.split("/")[1] || document.querySelector('a[href$="/customers"]')?.getAttribute("href").split("/")[1];
   if (!salon || !/^[0-9a-f]{6,}$/.test(salon)) throw new Error("Open the Versum panel first (panel.versum.com/<salon>/...).");
 
@@ -143,6 +143,7 @@
   async function listIds(onPage) {
     const ids = [];
     for (let p = 1; ; p++) {
+      if (state.stop) throw new Error("stopped");
       const doc = await page(`/${salon}/customers?size=${PAGE_SIZE}&page=${p}`);
       const found = [...new Set([...doc.querySelectorAll('a[href*="/customers/"]')]
         .map((a) => (a.getAttribute("href").match(/\/customers\/(\d{3,})$/) || [])[1]).filter(Boolean))];
@@ -154,8 +155,9 @@
     return [...new Set(ids)];
   }
 
-  /** `ids`: skip listing (e.g. the ids from an earlier listing, kept in localStorage). */
-  async function run({ limit, ids: given } = {}) {
+  /** `gapMs`: pause between requests (default GAP_MS). `ids`: skip listing (e.g. the ids from an earlier listing, kept in localStorage). */
+  async function run({ limit, ids: given, gapMs } = {}) {
+    if (gapMs) GAP_MS = gapMs;
     if (state.running) return status();
     Object.assign(state, { running: true, stop: false, errors: [], phase: "listing" });
     try {
@@ -189,7 +191,7 @@
   }
 
   function status() {
-    return { phase: state.phase, running: state.running, done: state.done, total: state.total, errors: state.errors.length, lastErrors: state.errors.slice(-3) };
+    return { phase: state.phase, running: state.running, done: state.done, total: state.total, errors: state.errors.length, lastErrors: state.errors.slice(-3), gapMs: GAP_MS };
   }
 
   /** Forget the saved patient list, so the next run lists Versum again (picks up cards added since). */
@@ -210,6 +212,6 @@
     return { records: records.length, bytes: blob.size, file: a.download };
   }
 
-  window.versumPatients = { run, status, download, relist, stop: () => { state.stop = true; return status(); }, fetchPatient, count: async () => (await allKeys()).length };
+  window.versumPatients = { run, status, download, relist, setGap: (ms) => { GAP_MS = ms; return status(); }, stop: () => { state.stop = true; return status(); }, fetchPatient, count: async () => (await allKeys()).length };
   return "versumPatients ready: run(), status(), stop(), download()";
 })();
