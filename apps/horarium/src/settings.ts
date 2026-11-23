@@ -168,14 +168,14 @@ async function inTransaction<T>(db: Db, work: (client: pg.PoolClient) => Promise
 
 export function registerSettings(app: FastifyInstance, db: Db, guards: Guards, publicOrigins: string[]) {
   // --- staff ------------------------------------------------------------------------------
-  app.get("/api/staff", { preHandler: guards.read }, async () => {
+  app.get("/api/staff", { config: { access: "staff" }, preHandler: guards.read }, async () => {
     const { rows } = await db.query(`${STAFF_SELECT} GROUP BY st.id ORDER BY st.sort_order, st.name`);
     return rows.map(staffRow);
   });
 
   app.post<{ Body: StaffBody }>(
     "/api/staff",
-    {
+    { config: { access: "staff", audited: true },
       preHandler: guards.admin,
       schema: { body: { type: "object", required: ["name", "sites"], properties: staffProps } },
     },
@@ -204,7 +204,7 @@ export function registerSettings(app: FastifyInstance, db: Db, guards: Guards, p
 
   app.patch<{ Params: { id: number }; Body: StaffBody }>(
     "/api/staff/:id",
-    {
+    { config: { access: "staff", audited: true },
       preHandler: guards.admin,
       schema: { params: idParams, body: { type: "object", properties: staffProps, minProperties: 1 } },
     },
@@ -262,11 +262,11 @@ export function registerSettings(app: FastifyInstance, db: Db, guards: Guards, p
     }));
   }
 
-  app.get("/api/opening-hours", { preHandler: guards.read }, async () => ({ timezone: CLINIC_TZ, sites: await openingHours() }));
+  app.get("/api/opening-hours", { config: { access: "staff" }, preHandler: guards.read }, async () => ({ timezone: CLINIC_TZ, sites: await openingHours() }));
 
   app.put<{ Params: { site: string }; Body: { week: Week } }>(
     "/api/opening-hours/:site",
-    {
+    { config: { access: "staff", audited: true },
       preHandler: guards.admin,
       schema: {
         body: {
@@ -310,7 +310,7 @@ export function registerSettings(app: FastifyInstance, db: Db, guards: Guards, p
 
   app.put<{ Params: { site: string; day: string }; Body: { opens?: string | null; closes?: string | null; note?: string | null } }>(
     "/api/opening-hours/:site/exceptions/:day",
-    {
+    { config: { access: "staff", audited: true },
       preHandler: guards.admin,
       schema: {
         params: { type: "object", properties: { site: { type: "string" }, day: isoDate } },
@@ -342,7 +342,7 @@ export function registerSettings(app: FastifyInstance, db: Db, guards: Guards, p
 
   app.delete<{ Params: { site: string; day: string } }>(
     "/api/opening-hours/:site/exceptions/:day",
-    {
+    { config: { access: "staff", audited: true },
       preHandler: guards.admin,
       schema: { params: { type: "object", properties: { site: { type: "string" }, day: isoDate } } },
     },
@@ -365,13 +365,13 @@ export function registerSettings(app: FastifyInstance, db: Db, guards: Guards, p
 
   app.get<{ Params: { id: number } }>(
     "/api/staff/:id/pattern",
-    { preHandler: guards.read, schema: { params: idParams } },
+    { config: { access: "staff" }, preHandler: guards.read, schema: { params: idParams } },
     async (req) => pattern(req.params.id),
   );
 
   app.put<{ Params: { id: number }; Body: { days: PatternDay[] } }>(
     "/api/staff/:id/pattern",
-    {
+    { config: { access: "staff", audited: true },
       preHandler: guards.write,
       schema: {
         params: idParams,
@@ -420,7 +420,7 @@ export function registerSettings(app: FastifyInstance, db: Db, guards: Guards, p
   // (holiday in opening exceptions) are skipped.
   app.post<{ Params: { id: number }; Body: { from: string; to: string } }>(
     "/api/staff/:id/schedule/generate",
-    {
+    { config: { access: "staff", audited: true },
       preHandler: guards.write,
       schema: {
         params: idParams,
@@ -470,7 +470,7 @@ export function registerSettings(app: FastifyInstance, db: Db, guards: Guards, p
 
   app.get<{ Params: { id: number }; Querystring: { from: string; to: string } }>(
     "/api/staff/:id/schedules",
-    {
+    { config: { access: "staff" },
       preHandler: guards.read,
       schema: {
         params: idParams,
@@ -507,7 +507,7 @@ export function registerSettings(app: FastifyInstance, db: Db, guards: Guards, p
   // (holidays and changed days applied), from `from` (default: today in the clinic) for `days` days.
   app.get<{ Querystring: { from?: string; days?: number } }>(
     "/api/public/opening-hours",
-    { schema: { querystring: publicRange } },
+    { config: { access: "public" }, schema: { querystring: publicRange } },
     async (req, reply) => {
       allowPublic(req, reply, publicOrigins);
       const days = req.query.days ?? 14;
@@ -571,7 +571,7 @@ export function registerSettings(app: FastifyInstance, db: Db, guards: Guards, p
   // Active staff with their working hours day by day (days with an absence left out). No phone or e-mail.
   app.get<{ Querystring: { from?: string; days?: number } }>(
     "/api/public/staff",
-    { schema: { querystring: publicRange } },
+    { config: { access: "public" }, schema: { querystring: publicRange } },
     async (req, reply) => {
       allowPublic(req, reply, publicOrigins);
       const days = req.query.days ?? 14;

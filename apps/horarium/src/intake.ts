@@ -4,6 +4,7 @@
 // iPad), and from then on it carries only a device token in an HttpOnly cookie scoped to
 // /api/kiosk. That token can fetch the form and send answers, nothing else: no patient data ever
 // goes back to the tablet. Reception reviews each registration and creates or attaches a card.
+import { tagGuard } from "./route-policy.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerAsyncHookHandler } from "fastify";
 import { checkCredentials, hashToken, newToken, type User } from "./auth.js";
 import { audit, type Db } from "./db.js";
@@ -53,6 +54,12 @@ const credentials = {
   password: { type: "string", minLength: 1, maxLength: 200 },
 } as const;
 
+declare module "fastify" {
+  interface FastifyRequest {
+    device?: Device;
+  }
+}
+
 export function registerIntake(
   app: FastifyInstance,
   db: Db,
@@ -72,6 +79,12 @@ export function registerIntake(
     const r = rows[0];
     return r ? { id: r.id, name: r.name, siteId: r.site_id, siteName: r.site_name } : null;
   }
+
+  const deviceGuard = tagGuard("device", async (req: FastifyRequest, reply: FastifyReply) => {
+    const device = await deviceFor(req);
+    if (!device) return reply.code(401).send({ error: "Ten tablet nie jest sparowany. Poproś o pomoc w recepcji." });
+    req.device = device;
+  });
 
   /** Staff login and password typed on the tablet, with the same lockout as the login screen. */
   async function staffOnTablet(req: FastifyRequest, reply: FastifyReply, login: string, password: string): Promise<User | null> {
@@ -97,7 +110,7 @@ export function registerIntake(
   }
 
   // --- the tablet -------------------------------------------------------------------------
-  app.get("/api/kiosk/state", async (req) => {
+  app.get("/api/kiosk/state", { config: { access: "public" } }, async (req) => {
     const device = await deviceFor(req);
     if (!device) {
       // Site names only, so whoever pairs the tablet can pick where it stands.
@@ -109,7 +122,7 @@ export function registerIntake(
 
   app.post<{ Body: { login: string; password: string; siteId: string; name: string } }>(
     "/api/kiosk/pair",
-    {
+    { config: { access: "credentials", audited: true },
       schema: {
         body: {
           type: "object",
@@ -135,10 +148,9 @@ export function registerIntake(
   // Switching the tablet back to normal use also needs a staff login, so a patient cannot do it.
   app.post<{ Body: { login: string; password: string } }>(
     "/api/kiosk/unpair",
-    { schema: { body: { type: "object", required: ["login", "password"], properties: credentials } } },
+    { config: { access: "device", audited: true }, preHandler: deviceGuard, schema: { body: { type: "object", required: ["login", "password"], properties: credentials } } },
     async (req, reply) => {
-      const device = await deviceFor(req);
-      if (!device) return reply.code(401).send({ error: "Ten tablet nie jest sparowany." });
+      const device = req.device!;
       const user = await staffOnTablet(req, reply, req.body.login, req.body.password);
       if (!user) return reply;
       await db.query("UPDATE kiosk_devices SET revoked_at = now() WHERE id = $1", [device.id]);
@@ -150,13 +162,13 @@ export function registerIntake(
 
   app.post<{ Body: { answers: Answers } }>(
     "/api/kiosk/submissions",
-    {
+    { config: { access: "device", audited: true },
+      preHandler: deviceGuard,
       bodyLimit: 64 * 1024,
       schema: { body: { type: "object", required: ["answers"], properties: { answers: { type: "object" } } } },
     },
     async (req, reply) => {
-      const device = await deviceFor(req);
-      if (!device) return reply.code(401).send({ error: "Ten tablet nie jest sparowany. Poproś o pomoc w recepcji." });
+      const device = req.device!;
       const recent = await db.query<{ n: number }>(
         "SELECT count(*)::int AS n FROM intake_submissions WHERE device_id = $1 AND created_at > now() - interval '1 hour'",
         [device.id],
@@ -190,7 +202,7 @@ export function registerIntake(
   // --- reception --------------------------------------------------------------------------
   app.get<{ Querystring: { status?: "new" | "accepted" } }>(
     "/api/intake",
-    {
+    { config: { access: "staff" },
       preHandler: guards.desk,
       schema: { querystring: { type: "object", properties: { status: { enum: ["new", "accepted"] } } } },
     },
@@ -210,7 +222,7 @@ export function registerIntake(
 
   app.get<{ Params: { id: number } }>(
     "/api/intake/:id",
-    { preHandler: guards.desk, schema: { params: idParams } },
+    { config: { access: "staff", audited: true }, preHandler: guards.desk, schema: { params: idParams } },
     async (req, reply) => {
       const { rows } = await db.query(
         `SELECT i.*, d.name AS device_name FROM intake_submissions i
@@ -248,7 +260,7 @@ export function registerIntake(
   // fields are filled in, medical flags are added (never removed), and notes get the new answers.
   app.post<{ Params: { id: number }; Body: { patientId?: number } }>(
     "/api/intake/:id/accept",
-    {
+    { config: { access: "staff", audited: true },
       preHandler: guards.desk,
       schema: { params: idParams, body: { type: "object", properties: { patientId: { type: "integer" } } } },
     },
@@ -315,7 +327,7 @@ export function registerIntake(
   // Test entries, duplicates, a patient who gave up halfway and asked to start over.
   app.delete<{ Params: { id: number } }>(
     "/api/intake/:id",
-    { preHandler: guards.desk, schema: { params: idParams } },
+    { config: { access: "staff", audited: true }, preHandler: guards.desk, schema: { params: idParams } },
     async (req, reply) => {
       const { rowCount } = await db.query("DELETE FROM intake_submissions WHERE id = $1 AND status = 'new'", [req.params.id]);
       if (!rowCount) return reply.code(404).send({ error: "Tej rejestracji nie ma albo już ją przyjęto." });
@@ -324,7 +336,7 @@ export function registerIntake(
     },
   );
 
-  app.get("/api/kiosk-devices", { preHandler: guards.desk }, async () => {
+  app.get("/api/kiosk-devices", { config: { access: "staff" }, preHandler: guards.desk }, async () => {
     const { rows } = await db.query(
       `SELECT d.id, d.name, d.site_id, d.created_at, d.last_seen_at, u.name AS created_by_name
          FROM kiosk_devices d LEFT JOIN users u ON u.id = d.created_by
@@ -342,7 +354,7 @@ export function registerIntake(
 
   app.delete<{ Params: { id: number } }>(
     "/api/kiosk-devices/:id",
-    { preHandler: guards.desk, schema: { params: idParams } },
+    { config: { access: "staff", audited: true }, preHandler: guards.desk, schema: { params: idParams } },
     async (req, reply) => {
       const { rowCount } = await db.query(
         "UPDATE kiosk_devices SET revoked_at = now() WHERE id = $1 AND revoked_at IS NULL",

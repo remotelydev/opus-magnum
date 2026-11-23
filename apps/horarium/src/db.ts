@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { auditTrail } from "./route-policy.js";
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");
 const MIGRATION_LOCK = 727001;
@@ -61,6 +62,8 @@ export async function audit(
   entityId: string | number,
   changes?: unknown,
 ): Promise<void> {
+  const trail = auditTrail.getStore();
+  if (trail) trail.entries++;
   await db.query(
     "INSERT INTO audit_log (user_id, action, entity, entity_id, changes) VALUES ($1, $2, $3, $4, $5)",
     [userId, action, entity, String(entityId), changes === undefined ? null : JSON.stringify(changes)],

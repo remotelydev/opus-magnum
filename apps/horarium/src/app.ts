@@ -1,3 +1,4 @@
+import { enforceRoutePolicy, tagGuard } from "./route-policy.js";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { login, logout, ROLES, userForToken, type Role, type User } from "./auth.js";
@@ -37,10 +38,10 @@ function bearer(req: FastifyRequest): string | null {
 }
 
 function guard(roles: Role[]) {
-  return async (req: FastifyRequest, reply: FastifyReply) => {
+  return tagGuard("staff", async (req: FastifyRequest, reply: FastifyReply) => {
     if (!req.user) return reply.code(401).send({ error: "Zaloguj się." });
     if (!roles.includes(req.user.role)) return reply.code(403).send({ error: "Brak uprawnień." });
-  };
+  });
 }
 
 function pgCode(error: unknown): string | undefined {
@@ -187,6 +188,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     );
   }
 
+  enforceRoutePolicy(app);
   app.decorateRequest("user", null);
   app.addHook("onRequest", async (req) => {
     const token = bearer(req);
@@ -205,12 +207,12 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     return reply.code(status).send({ error: status >= 500 ? "Błąd serwera." : (error as Error).message });
   });
 
-  app.get("/health", async () => ({ ok: true, service: "horarium" }));
+  app.get("/health", { config: { access: "public" } }, async () => ({ ok: true, service: "horarium" }));
 
   // --- auth -------------------------------------------------------------------------------
   app.post<{ Body: { login: string; password: string } }>(
     "/api/auth/login",
-    {
+    { config: { access: "credentials", audited: true },
       schema: {
         body: {
           type: "object",
@@ -240,17 +242,17 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     },
   );
 
-  app.post("/api/auth/logout", async (req, reply) => {
+  app.post("/api/auth/logout", { config: { access: "public", audited: "ends a session, nothing to record" } }, async (req, reply) => {
     const token = bearer(req);
     if (token) await logout(db, token);
     reply.header("set-cookie", "session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0");
     return { ok: true };
   });
 
-  app.get("/api/me", { preHandler: guard(ALL) }, async (req) => req.user);
+  app.get("/api/me", { config: { access: "staff" }, preHandler: guard(ALL) }, async (req) => req.user);
 
   // --- reference data ---------------------------------------------------------------------
-  app.get("/api/sites", { preHandler: guard(ALL) }, async () => (await db.query("SELECT * FROM sites ORDER BY name")).rows);
+  app.get("/api/sites", { config: { access: "staff" }, preHandler: guard(ALL) }, async () => (await db.query("SELECT * FROM sites ORDER BY name")).rows);
 
   registerSettings(app, db, { read: guard(ALL), write: guard(WRITE_ROLES), admin: guard(ADMIN) }, opts.publicOrigins ?? []);
   registerServices(app, db, { read: guard(ALL), admin: guard(ADMIN) }, opts.publicOrigins ?? []);
@@ -259,7 +261,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
   // --- patients ---------------------------------------------------------------------------
   app.get<{ Querystring: { q?: string; limit?: number } }>(
     "/api/patients",
-    {
+    { config: { access: "staff" },
       preHandler: guard(ALL),
       schema: {
         querystring: {
@@ -288,7 +290,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
   // Paged list for the Patients view: everyone, or narrowed by name or phone digits.
   app.get<{ Querystring: { q?: string; page?: number; pageSize?: number } }>(
     "/api/patients/list",
-    {
+    { config: { access: "staff" },
       preHandler: guard(ALL),
       schema: {
         querystring: {
@@ -320,7 +322,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
 
   app.get<{ Params: { id: number } }>(
     "/api/patients/:id",
-    { preHandler: guard(ALL), schema: { params: { type: "object", properties: { id: { type: "integer" } } } } },
+    { config: { access: "staff", audited: true }, preHandler: guard(ALL), schema: { params: { type: "object", properties: { id: { type: "integer" } } } } },
     async (req, reply) => {
       const { rows } = await db.query(
         `SELECT p.*, r.first_name || ' ' || r.last_name AS referred_by_name
@@ -432,7 +434,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
 
   app.post<{ Body: PatientBody }>(
     "/api/patients",
-    {
+    { config: { access: "staff", audited: true },
       preHandler: guard(WRITE_ROLES),
       schema: { body: { type: "object", required: ["firstName", "lastName"], properties: patientProps } },
     },
@@ -451,7 +453,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
 
   app.patch<{ Params: { id: number }; Body: PatientBody }>(
     "/api/patients/:id",
-    {
+    { config: { access: "staff", audited: true },
       preHandler: guard(WRITE_ROLES),
       schema: {
         params: { type: "object", properties: { id: { type: "integer" } } },
@@ -477,7 +479,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
   // Change log of one patient: edits and views of the card, plus changes to their visits. Admin only.
   app.get<{ Params: { id: number } }>(
     "/api/patients/:id/history",
-    { preHandler: guard(ADMIN), schema: { params: { type: "object", properties: { id: { type: "integer" } } } } },
+    { config: { access: "staff" }, preHandler: guard(ADMIN), schema: { params: { type: "object", properties: { id: { type: "integer" } } } } },
     async (req) => {
       const { rows } = await db.query(
         `SELECT l.id, l.at, l.action, l.entity, l.entity_id, l.changes, u.name AS user_name
@@ -504,7 +506,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
   // --- schedules --------------------------------------------------------------------------
   app.get<{ Querystring: { site: string; from: string; to: string } }>(
     "/api/schedules",
-    {
+    { config: { access: "staff" },
       preHandler: guard(ALL),
       schema: {
         querystring: {
@@ -533,7 +535,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
 
   app.post<{ Body: { staffId: number; siteId: string; startsAt: string; endsAt: string; kind?: "work" | "absence" } }>(
     "/api/schedules",
-    {
+    { config: { access: "staff", audited: true },
       preHandler: guard(WRITE_ROLES),
       schema: {
         body: {
@@ -579,7 +581,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
 
   app.delete<{ Params: { id: number } }>(
     "/api/schedules/:id",
-    { preHandler: guard(WRITE_ROLES), schema: { params: { type: "object", properties: { id: { type: "integer" } } } } },
+    { config: { access: "staff", audited: true }, preHandler: guard(WRITE_ROLES), schema: { params: { type: "object", properties: { id: { type: "integer" } } } } },
     async (req, reply) => {
       const { rowCount } = await db.query("DELETE FROM schedules WHERE id = $1", [req.params.id]);
       if (!rowCount) return reply.code(404).send({ error: "Nie ma takiego wpisu." });
@@ -591,7 +593,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
   // --- appointments -----------------------------------------------------------------------
   app.get<{ Querystring: { site: string; from: string; to: string; staffId?: number } }>(
     "/api/appointments",
-    {
+    { config: { access: "staff" },
       preHandler: guard(ALL),
       schema: {
         querystring: {
@@ -684,7 +686,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
 
   app.post<{ Body: AppointmentBody }>(
     "/api/appointments",
-    {
+    { config: { access: "staff", audited: true },
       preHandler: guard(WRITE_ROLES),
       schema: {
         body: {
@@ -745,7 +747,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     Body: Partial<{ staffId: number; siteId: string; startsAt: string; endsAt: string; status: string; notes: string | null; serviceId: number | null; title: string | null; notifyPatient: boolean }>;
   }>(
     "/api/appointments/:id",
-    {
+    { config: { access: "staff", audited: true },
       preHandler: guard(WRITE_ROLES),
       schema: {
         params: { type: "object", properties: { id: { type: "integer" } } },
@@ -808,7 +810,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
   // The change log keeps only that it changed, never the medical text.
   app.put<{ Params: { id: number }; Body: { text: string | null } }>(
     "/api/appointments/:id/treatment",
-    {
+    { config: { access: "staff", audited: true },
       preHandler: guard(["admin", "doctor"]),
       schema: {
         params: { type: "object", properties: { id: { type: "integer" } } },

@@ -78,7 +78,7 @@ export function registerServices(
 ) {
   app.get<{ Querystring: { all?: boolean } }>(
     "/api/services",
-    {
+    { config: { access: "staff" },
       preHandler: guards.read,
       schema: { querystring: { type: "object", properties: { all: { type: "boolean" } } } },
     },
@@ -93,7 +93,7 @@ export function registerServices(
 
   app.post<{ Body: Partial<Service> }>(
     "/api/services",
-    {
+    { config: { access: "staff", audited: true },
       preHandler: guards.admin,
       schema: {
         body: { type: "object", required: ["category", "name", "durationMinutes"], properties: PROPS },
@@ -116,7 +116,7 @@ export function registerServices(
 
   app.patch<{ Params: { id: number }; Body: Partial<Service> }>(
     "/api/services/:id",
-    {
+    { config: { access: "staff", audited: true },
       preHandler: guards.admin,
       schema: {
         params: { type: "object", properties: { id: { type: "integer" } } },
@@ -143,7 +143,7 @@ export function registerServices(
 
   // Public price list for the clinic website. No login, read-only, only services marked for the website.
   // Publish just this path through the tunnel; the rest of the API stays inside the clinic network.
-  app.get("/api/public/services", async (req, reply) => {
+  app.get("/api/public/services", { config: { access: "public" } }, async (req, reply) => {
     const origin = req.headers.origin;
     if (origin && publicOrigins.includes(origin)) {
       reply.header("access-control-allow-origin", origin);
