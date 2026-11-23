@@ -180,7 +180,10 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
 
   // The reception UI is a static build served by this same process: one service to run and watch.
   if (opts.webRoot) {
-    app.register(fastifyStatic, { root: opts.webRoot });
+    app.register(fastifyStatic, { root: opts.webRoot, serve: false });
+    app.get<{ Params: { "*": string } }>("/*", { config: { access: "public" } }, (req, reply) =>
+      reply.sendFile(req.params["*"] || "index.html"),
+    );
     app.setNotFoundHandler((req, reply) =>
       req.method === "GET" && !req.url.startsWith("/api/")
         ? reply.sendFile("index.html")
