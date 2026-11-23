@@ -1,6 +1,6 @@
-import { enforceRoutePolicy, tagGuard } from "./route-policy.js";
+import { policedFastify, tagGuard } from "./route-policy.js";
 import fastifyStatic from "@fastify/static";
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+import { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { login, logout, ROLES, userForToken, type Role, type User } from "./auth.js";
 import { audit, type Db } from "./db.js";
 import { registerIntake } from "./intake.js";
@@ -82,9 +82,7 @@ function patientRow(r: Record<string, unknown>) {
   };
 }
 
-/** Search results: enough to pick the right person. Notes and medical flags only come with the full card. */
-/** The only patient columns a search or list query loads: notes and medical data stay in the database. */
-const PATIENT_SUMMARY_COLUMNS = "id, first_name, last_name, phone, birth_date";
+export const PATIENT_SUMMARY_COLUMNS = "id, first_name, last_name, phone, birth_date";
 
 function patientSummary(r: Record<string, unknown>) {
   return {
@@ -158,7 +156,6 @@ const APPOINTMENT_SELECT = `
 
 export interface AppOptions {
   logger?: boolean;
-  /** Where request logs go when `logger` is on; tests capture it. */
   logStream?: NodeJS.WritableStream;
   /** Built reception UI to serve, if any. */
   webRoot?: string;
@@ -180,7 +177,7 @@ const LOG_SERIALIZERS = {
 };
 
 export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
-  const app = Fastify({
+  const app = policedFastify({
     logger: opts.logger ? { serializers: LOG_SERIALIZERS, stream: opts.logStream } : false,
   });
   const limiter = opts.loginLimiter ?? createLoginLimiter();
@@ -198,7 +195,6 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
     );
   }
 
-  enforceRoutePolicy(app);
   app.decorateRequest("user", null);
   app.addHook("onRequest", async (req) => {
     const token = bearer(req);

@@ -1,17 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import Fastify from "fastify";
 import { audit, type Queryable } from "./db.js";
-import { enforceRoutePolicy, tagGuard } from "./route-policy.js";
+import { tmpdir } from "node:os";
+import { buildApp } from "./app.js";
+import { policedFastify, tagGuard } from "./route-policy.js";
 
 const staffGuard = tagGuard("staff", async () => {});
 const deviceGuard = tagGuard("device", async () => {});
 const fakeDb = { query: async () => ({ rows: [] }) } as unknown as Queryable;
 
 function app() {
-  const instance = Fastify();
-  enforceRoutePolicy(instance);
-  return instance;
+  return policedFastify({});
 }
 
 describe("route policy", () => {
@@ -54,5 +53,13 @@ describe("route policy", () => {
     });
     assert.equal((await a.inject({ method: "POST", url: "/forgot" })).statusCode, 500);
     assert.equal((await a.inject({ method: "POST", url: "/kept" })).statusCode, 200);
+  });
+});
+
+describe("UI file route", () => {
+  const build = () => buildApp({ query: async () => ({ rows: [] }) } as never, { webRoot: tmpdir() });
+
+  test("is covered by the policy like every other route", () => {
+    assert.doesNotThrow(build);
   });
 });
