@@ -83,6 +83,9 @@ function patientRow(r: Record<string, unknown>) {
 }
 
 /** Search results: enough to pick the right person. Notes and medical flags only come with the full card. */
+/** The only patient columns a search or list query loads: notes and medical data stay in the database. */
+const PATIENT_SUMMARY_COLUMNS = "id, first_name, last_name, phone, birth_date";
+
 function patientSummary(r: Record<string, unknown>) {
   return {
     id: r.id,
@@ -155,6 +158,8 @@ const APPOINTMENT_SELECT = `
 
 export interface AppOptions {
   logger?: boolean;
+  /** Where request logs go when `logger` is on; tests capture it. */
+  logStream?: NodeJS.WritableStream;
   /** Built reception UI to serve, if any. */
   webRoot?: string;
   /** Origins allowed to read the public price list from a browser (the clinic website). */
@@ -175,7 +180,9 @@ const LOG_SERIALIZERS = {
 };
 
 export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
-  const app = Fastify({ logger: opts.logger ? { serializers: LOG_SERIALIZERS } : false });
+  const app = Fastify({
+    logger: opts.logger ? { serializers: LOG_SERIALIZERS, stream: opts.logStream } : false,
+  });
   const limiter = opts.loginLimiter ?? createLoginLimiter();
 
   // The reception UI is a static build served by this same process: one service to run and watch.
@@ -279,7 +286,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
       if (!q) return [];
       const phone = normalizePhone(q);
       const { rows } = await db.query(
-        `SELECT * FROM patients
+        `SELECT ${PATIENT_SUMMARY_COLUMNS} FROM patients
           WHERE ($1::text IS NOT NULL AND phone = $1)
              OR lower(last_name || ' ' || first_name) LIKE $2
              OR lower(first_name || ' ' || last_name) LIKE $2
@@ -312,7 +319,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
       const { where, params } = patientFilter(req.query.q ?? "");
       const [list, count] = await Promise.all([
         db.query(
-          `SELECT * FROM patients ${where}
+          `SELECT ${PATIENT_SUMMARY_COLUMNS} FROM patients ${where}
             ORDER BY lower(last_name), lower(first_name), id
             LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
           [...params, pageSize, (page - 1) * pageSize],
