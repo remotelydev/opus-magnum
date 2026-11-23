@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "./app.js";
@@ -40,6 +43,24 @@ describe("horarium API", { skip: TEST_DATABASE_URL ? false : "TEST_DATABASE_URL 
   after(async () => {
     await app.close();
     await db.end();
+  });
+
+  test("boots with the built reception UI and serves it without a login", async () => {
+    const webRoot = mkdtempSync(join(tmpdir(), "horarium-web-"));
+    writeFileSync(join(webRoot, "index.html"), "<title>Horarium</title>");
+    const withUi = buildApp(db, { webRoot });
+    await withUi.ready();
+    writeFileSync(join(webRoot, "app.js"), "console.log(1)");
+    const get = (url: string) => withUi.inject({ method: "GET", url });
+    assert.equal((await get("/")).statusCode, 200);
+    const asset = await get("/app.js");
+    assert.equal(asset.statusCode, 200);
+    assert.match(String(asset.headers["content-type"]), /javascript/);
+    assert.match((await get("/patients/12")).body, /<title>Horarium/);
+    assert.equal((await get("/api/nope")).statusCode, 404);
+    assert.doesNotMatch((await get("/..%2f..%2fetc/passwd")).body, /root:/);
+    assert.equal((await withUi.inject({ method: "GET", url: "/api/patients" })).statusCode, 401);
+    await withUi.close();
   });
 
   test("rejects a wrong password and anonymous calls", async () => {
