@@ -1,14 +1,13 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type FastifyServerOptions } from "fastify";
 
-/** How a route proves who is calling. Every route declares one in `config.access`. */
 export type Access = "staff" | "device" | "credentials" | "public";
+type WhyNotAudited = string;
 
 declare module "fastify" {
   interface FastifyContextConfig {
     access?: Access;
-    /** `true`: a 2xx answer must have written an audit entry. A string: why this write is not audited. */
-    audited?: true | string;
+    audited?: true | WhyNotAudited;
   }
 }
 
@@ -22,7 +21,6 @@ export function tagGuard<T extends Guard>(kind: "staff" | "device", guard: T): T
 
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-/** Counts the audit entries written while one request runs; audit() adds to it. */
 export const auditTrail = new AsyncLocalStorage<{ entries: number }>();
 
 function guardKinds(preHandler: unknown): Access[] {
@@ -30,8 +28,8 @@ function guardKinds(preHandler: unknown): Access[] {
   return list.flatMap((fn) => ((fn as Guard)[GUARD_KIND] ? [(fn as Guard)[GUARD_KIND]!] : []));
 }
 
-/** Register before any route: a route that breaks the policy stops the app from starting. */
-export function enforceRoutePolicy(app: FastifyInstance): void {
+export function policedFastify(opts: FastifyServerOptions): FastifyInstance {
+  const app = Fastify(opts);
   app.addHook("onRoute", (route) => {
     const methods = [route.method].flat();
     const name = `${methods.join("/")} ${route.url}`;
@@ -59,4 +57,6 @@ export function enforceRoutePolicy(app: FastifyInstance): void {
     }
     return payload;
   });
+
+  return app;
 }
