@@ -127,7 +127,15 @@ export interface StaffReplyDeps {
   onError?: (error: unknown) => void;
 }
 
-export async function handleStaffMessage(
+let inbox: Promise<unknown> = Promise.resolve();
+
+export function handleStaffMessage(message: InboundText, deps: StaffReplyDeps): Promise<StaffReplyOutcome> {
+  const run = inbox.then(() => processStaffMessage(message, deps));
+  inbox = run.catch(() => undefined);
+  return run;
+}
+
+async function processStaffMessage(
   message: InboundText,
   deps: StaffReplyDeps,
 ): Promise<StaffReplyOutcome> {

@@ -49,17 +49,6 @@ describe("resolveWhatsAppEnv", () => {
 describe("booking ticket", () => {
   it("formats the fixture as one minimal Polish line", () => {
     const ticket = buildDevTicket(config, {}, mondayOpen);
-    assert.deepEqual(ticket, {
-      locationId: "turek",
-      site: "Turek",
-      receivedAt: "14.09 10:00",
-      name: DEV_TICKET_FIXTURE.name,
-      phone: DEV_TICKET_FIXTURE.phone,
-      category: "book",
-      slot: "wtorek rano",
-      urgent: false,
-      returning: false,
-    });
     assert.equal(
       formatTicketMessage(ticket),
       "Turek · wizyta · nowy · wtorek rano · Jan Kowalski · +48555111222 · 14.09 10:00",

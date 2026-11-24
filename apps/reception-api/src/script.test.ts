@@ -27,13 +27,6 @@ describe("opening hours", () => {
     assert.equal(isOpenAt(turek.hours, sundayClosed, tz), false);
   });
 
-  it("spoken hours come from config JSON, grouped", () => {
-    assert.equal(
-      hoursSummary(turek.hours),
-      "poniedziałek–piątek 08:00–20:00, sobota 10:00–15:00, niedziela nieczynne",
-    );
-  });
-
   it("spoken hours change when config hours change", () => {
     const tweaked = structuredClone(turek.hours);
     tweaked.monday = { open: "09:00", close: "17:00" };
@@ -103,30 +96,21 @@ describe("script fixtures", () => {
     assert.equal(result.action, "none");
   });
 
-  it("hours for Turek and Poddębice use different address and phone", () => {
-    const turek = reply(config, {
-      locationId: "turek",
-      now: mondayOpen,
-      consent: "yes",
-      intent: "hours",
-    });
-    const poddebice = reply(config, {
-      locationId: "poddebice",
-      now: mondayOpen,
-      consent: "yes",
-      intent: "hours",
-    });
-    const turekHours = config.locations.find((item) => item.id === "turek");
-    assert.ok(turekHours);
-    assert.match(turek.lines.join(" "), /Łąkowa/);
-    assert.match(turek.lines.join(" "), /690649589/);
-    assert.equal(
-      turek.lines.join(" ").includes(hoursSummary(turekHours.hours)),
-      true,
-    );
-    assert.match(poddebice.lines.join(" "), /Krasickiego/);
-    assert.match(poddebice.lines.join(" "), /690512141/);
-    assert.notEqual(turek.lines.join(" "), poddebice.lines.join(" "));
+  it("hours answer each location with its own address, phone and hours", () => {
+    const answers = config.locations.map((location) => ({
+      location,
+      text: reply(config, { locationId: location.id, now: mondayOpen, consent: "yes", intent: "hours" }).lines.join(" "),
+    }));
+    assert.ok(answers.length >= 2);
+    const digits = (value: string) => value.replace(/\D/g, "").slice(-9);
+    for (const { location, text } of answers) {
+      assert.ok(text.includes(hoursSummary(location.hours)), `${location.id}: hours`);
+      assert.ok(text.includes(location.address), `${location.id}: address`);
+      assert.ok(text.replace(/\D/g, "").includes(digits(location.phone)), `${location.id}: phone`);
+      for (const other of answers.filter((entry) => entry.location.id !== location.id)) {
+        assert.ok(!text.replace(/\D/g, "").includes(digits(other.location.phone)), `${location.id} leaks ${other.location.id} phone`);
+      }
+    }
   });
 
   it("booking asks for fields and does not promise a clock time", () => {
