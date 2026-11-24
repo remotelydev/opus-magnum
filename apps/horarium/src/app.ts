@@ -264,7 +264,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
   registerSettings(app, db, { read: guard(ALL), write: guard(WRITE_ROLES), admin: guard(ADMIN) }, opts.publicOrigins ?? []);
   registerServices(app, db, { read: guard(ALL), admin: guard(ADMIN) }, opts.publicOrigins ?? []);
   registerIntake(app, db, { desk: guard(WRITE_ROLES) }, limiter);
-  registerStatistics(app, db, { stats: guard(["admin", "doctor"]), admin: guard(ADMIN), checkout: guard(["admin", "reception", "doctor"]) });
+  registerStatistics(app, db, { stats: guard(["admin", "doctor"]), admin: guard(ADMIN), checkout: guard(["admin", "reception", "doctor", "hygienist"]) });
 
   // --- patients ---------------------------------------------------------------------------
   app.get<{ Querystring: { q?: string; limit?: number } }>(

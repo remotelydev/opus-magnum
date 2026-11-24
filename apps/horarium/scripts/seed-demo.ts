@@ -523,7 +523,8 @@ async function demoStatistics(client: Pick<Db, "query">) {
 }
 
 /** Demo logins, all with the demo password: reception, admin, Bartosz (admin who also sees the reports the
- *  clinic does not use yet), a doctor tied to the first person in the calendar, and a hygienist. */
+ *  clinic does not use yet), a doctor tied to the first person in the calendar, and a hygienist tied to the first
+ *  hygienist (both close their own visits). */
 async function demoLogins(client: Pick<Db, "query">) {
   const people: [string, string, Role, string[]][] = [
     ["recepcja", "Recepcja (demo)", "reception", []],
@@ -539,6 +540,11 @@ async function demoLogins(client: Pick<Db, "query">) {
   await client.query(
     `UPDATE users SET staff_id = (SELECT id FROM staff WHERE kind = 'person' AND active ORDER BY sort_order, id LIMIT 1)
       WHERE login = 'lekarz' AND staff_id IS NULL`,
+  );
+  await client.query(
+    `UPDATE users SET staff_id = (SELECT id FROM staff WHERE kind = 'person' AND active AND (name ILIKE 'hig.%' OR title ILIKE 'higien%')
+                                   ORDER BY sort_order, id LIMIT 1)
+      WHERE login = 'higienistka' AND staff_id IS NULL`,
   );
 }
 

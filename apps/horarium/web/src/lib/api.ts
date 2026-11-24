@@ -21,7 +21,7 @@ export interface CheckoutPayment {
 /** Whose visits this login closes: anyone's (reception, admins), one person's (a doctor), or none. */
 export function closesVisitsOf(user: User): "all" | number | null {
   if (user.role === "admin" || user.role === "reception") return "all";
-  return user.role === "doctor" ? user.staffId : null;
+  return isClinical(user.role) ? user.staffId : null;
 }
 export interface CheckoutItem {
   serviceId: number | null;

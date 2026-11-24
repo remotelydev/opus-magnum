@@ -36,7 +36,7 @@ Create the first admin login (password from the environment, at least 10 charact
 CLINIC_PASSWORD='change-me-please' pnpm --filter horarium user:create admin admin "Administrator"
 ```
 
-Roles: `admin`, `reception`, `doctor` (tie the login to the person's staff card so their statistics show), `hygienist`. A login can also get features of its own: `--features=hidden_reports` shows the reports the clinic does not use yet (tips, client origins, commissions, stock).
+Roles: `admin`, `reception`, `doctor` (tie the login to the person's staff card so their statistics show and they can close their own visits), `hygienist` (calendar, patient cards, treatment description, closing their own visits; no statistics). A login can also get features of its own: `--features=hidden_reports` shows the reports the clinic does not use yet (tips, client origins, commissions, stock).
 
 ```bash
 pnpm --filter horarium build
@@ -85,7 +85,7 @@ apps/horarium/preview/share.sh stop
 
 "Statystyki", as in Versum: financial report (visits, time, money, payment methods, per person), staff activity, service popularity, returning clients, work time and the cash register of each clinic, each for Turek, Poddębice or both and any date range, with a CSV download that opens in Excel. Admins see everything; a doctor sees only their own rows and no cash register; reception and hygienists do not see statistics.
 
-Money comes from closing a visit: reception, an admin or the visit's own doctor picks the services done from the price list (the suggested price, the lower end of a range, can be changed by clicking it) and cash or card, or both split. Dental care is VAT-exempt, so there is one amount. The Versum history only has amounts, so it counts as "Usługa spoza cennika".
+Money comes from closing a visit: reception, an admin or the visit's own doctor or hygienist picks the services done from the price list (the suggested price, the lower end of a range, can be changed by clicking it) and cash or card, or both split. Dental care is VAT-exempt, so there is one amount. The Versum history only has amounts, so it counts as "Usługa spoza cennika".
 
 ## Patients from Versum
 

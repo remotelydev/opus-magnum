@@ -53,10 +53,10 @@ function scope(user: User, reply: FastifyReply): { staffId: number | null } | nu
   return null;
 }
 
-/** Reception and admins close any visit; a doctor only their own. */
+/** Reception and admins close any visit; a doctor or hygienist only their own. */
 function mayClose(user: User, staffId: number): boolean {
   if (user.role === "admin" || user.role === "reception") return true;
-  return user.role === "doctor" && user.staffId !== null && user.staffId === staffId;
+  return (user.role === "doctor" || user.role === "hygienist") && user.staffId !== null && user.staffId === staffId;
 }
 
 function checkRange(q: Range, reply: FastifyReply): boolean {
@@ -388,7 +388,7 @@ export function registerStatistics(
   );
 
   // --- Closing a visit ------------------------------------------------------------------------
-  // Reception, admins or the visit's own doctor pick the services done (from the price list; the price
+  // Reception, admins or the visit's own doctor or hygienist pick the services done (from the price list; the price
   // can be changed) and how the patient paid: one way, or split between cash and card. Closing again
   // replaces both. The visit becomes "done".
   app.get<{ Params: { id: number } }>(

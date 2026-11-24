@@ -63,7 +63,7 @@ describe("statistics, closing visits and the cash register", { skip: TEST_DATABA
     await createUser(db, { login: "admin", name: "Admin", role: "admin", password: PASSWORD });
     await createUser(db, { login: "recepcja", name: "Recepcja", role: "reception", password: PASSWORD });
     await createUser(db, { login: "dr.a", name: "Dr A", role: "doctor", password: PASSWORD, staffId: drA });
-    await createUser(db, { login: "higienistka", name: "Higienistka", role: "hygienist", password: PASSWORD });
+    await createUser(db, { login: "higienistka", name: "Higienistka", role: "hygienist", password: PASSWORD, staffId: drB });
     await createUser(db, { login: "bartosz", name: "Bartosz", role: "admin", password: PASSWORD, features: ["hidden_reports"] });
     for (const login of ["admin", "recepcja", "dr.a", "higienistka", "bartosz"]) {
       const res = await call("POST", "/api/auth/login", null, { login, password: PASSWORD });
@@ -130,8 +130,11 @@ describe("statistics, closing visits and the cash register", { skip: TEST_DATABA
     assert.equal((await close(id, "recepcja", [{ serviceId: 9999, price: 1 }], "cash")).status, 400);
     const other = await visit(drB, jan, "2027-01-04T09:00:00Z");
     assert.equal((await close(other, "dr.a", [{ serviceId: filling, price: 1 }], "cash")).status, 403);
-    assert.equal((await close(other, "higienistka", [{ serviceId: filling, price: 1 }], "cash")).status, 403);
     const own = await visit(drA, jan, "2027-01-04T09:00:00Z");
+    // The hygienist's login is tied to Dr B's card here: Dr B's visits are hers, Dr A's are not.
+    assert.equal((await close(own, "higienistka", [{ serviceId: filling, price: 1 }], "cash")).status, 403);
+    const hers = await visit(drB, anna, "2027-01-05T09:00:00Z", "poddebice");
+    assert.equal((await close(hers, "higienistka", [{ serviceId: checkup, price: 100 }], "card")).status, 200);
     assert.equal((await close(own, "dr.a", [{ serviceId: filling, price: 250 }], "cash")).status, 200);
     const block = await visit(drB, null, "2026-11-03T12:00:00Z");
     assert.equal((await close(block, "recepcja", [{ serviceId: filling, price: 1 }], "cash")).status, 400);
