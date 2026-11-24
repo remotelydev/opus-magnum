@@ -2,7 +2,7 @@ import { Button } from "@opus-magnum/dentaplus-ui/components/button";
 import { Input } from "@opus-magnum/dentaplus-ui/components/field";
 import { Modal } from "@opus-magnum/dentaplus-ui/components/modal";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, PAYMENT_METHOD_LABEL, type Appointment, type PaymentMethod, type Service } from "../lib/api.ts";
+import { api, PAYMENT_METHOD_LABEL, type Appointment, type CheckoutPayment, type PaymentMethod, type Service } from "../lib/api.ts";
 import { formatMoney, suggestedPrice } from "../lib/money.ts";
 
 interface Line {
@@ -28,6 +28,8 @@ export function CheckoutDialog({ appointment: a, services, onDone, onCancel }: P
   const nextKey = useRef(1);
   const [lines, setLines] = useState<Line[] | null>(null);
   const [method, setMethod] = useState<PaymentMethod | null>(null);
+  // Split payment: the cash part as typed; the card pays the rest. Off by default (one way to pay).
+  const [cashPart, setCashPart] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -43,7 +45,9 @@ export function CheckoutDialog({ appointment: a, services, onDone, onCancel }: P
       .then((saved) => {
         if (saved.items.length) {
           setLines(saved.items.filter((i) => i.serviceId !== null).map((i) => line({ id: i.serviceId!, name: i.name }, i.price)));
-          if (saved.method === "cash" || saved.method === "card") setMethod(saved.method);
+          const [first, second] = saved.payments;
+          if (second) setCashPart(String(saved.payments.find((p) => p.method === "cash")?.amount ?? 0).replace(".", ","));
+          else if (first?.method === "cash" || first?.method === "card") setMethod(first.method);
           return;
         }
         const booked = services.find((s) => s.id === a.serviceId);
@@ -67,19 +71,33 @@ export function CheckoutDialog({ appointment: a, services, onDone, onCancel }: P
     setQuery("");
   };
   const total = (lines ?? []).reduce((sum, l) => sum + l.price, 0);
+  const cash = cashPart === null ? null : Number(cashPart.replace(/\s/g, "").replace(",", "."));
+  const cashValid = cash !== null && Number.isFinite(cash) && cash >= 0 && cash <= total;
 
   const save = async () => {
     if (!lines?.length) return setError("Dodaj co najmniej jedną usługę z cennika.");
-    if (!method) return setError("Wybierz formę płatności.");
+    let payments: CheckoutPayment[];
+    if (cashPart !== null) {
+      if (!cashValid) return setError("Część gotówkowa musi być między 0 a kwotą razem.");
+      const c = Math.round(cash! * 100) / 100;
+      payments = [
+        { method: "cash", amount: c },
+        { method: "card", amount: Math.round((total - c) * 100) / 100 },
+      ];
+    } else {
+      if (!method) return setError("Wybierz formę płatności.");
+      payments = [{ method, amount: Math.round(total * 100) / 100 }];
+    }
     setBusy(true);
     setError(null);
     try {
       const res = await api.saveCheckout(
         a.id,
         lines.map((l) => ({ serviceId: l.serviceId, price: l.price })),
-        method,
+        payments,
       );
-      onDone(`Wizyta zakończona: ${formatMoney(res.total)}, ${PAYMENT_METHOD_LABEL[method].toLowerCase()}.`);
+      const how = payments.length > 1 ? "gotówka i karta" : PAYMENT_METHOD_LABEL[payments[0].method].toLowerCase();
+      onDone(`Wizyta zakończona: ${formatMoney(res.total)}, ${how}.`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -161,13 +179,30 @@ export function CheckoutDialog({ appointment: a, services, onDone, onCancel }: P
 
         <fieldset className="space-y-1">
           <legend className="text-xs font-medium text-muted-foreground">Forma płatności</legend>
-          <div className="flex gap-2">
-            {(Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map((m) => (
-              <Button key={m} type="button" variant={method === m ? "primary" : "outline"} aria-pressed={method === m} onClick={() => setMethod(m)}>
-                {PAYMENT_METHOD_LABEL[m]}
+          {cashPart === null ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {(Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map((m) => (
+                <Button key={m} type="button" variant={method === m ? "primary" : "outline"} aria-pressed={method === m} onClick={() => setMethod(m)}>
+                  {PAYMENT_METHOD_LABEL[m]}
+                </Button>
+              ))}
+              <Button type="button" variant="link" size="sm" onClick={() => setCashPart("")}>
+                Podziel płatność
               </Button>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="grid grid-cols-[auto_8rem] items-center gap-x-3 gap-y-2">
+                <label htmlFor="pay-cash">Gotówka</label>
+                <Input id="pay-cash" inputMode="decimal" autoFocus value={cashPart} onChange={(e) => setCashPart(e.target.value)} className="text-right" />
+                <span>Karta</span>
+                <span className="pr-3 text-right tabular-nums">{cashValid ? formatMoney(total - cash!) : "—"}</span>
+              </div>
+              <Button type="button" variant="link" size="sm" className="px-0" onClick={() => setCashPart(null)}>
+                Jedna forma płatności
+              </Button>
+            </div>
+          )}
         </fieldset>
 
         {error && (

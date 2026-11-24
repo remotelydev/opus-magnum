@@ -28,6 +28,8 @@ interface Props {
   canSeeHistory?: boolean;
   /** Doctors and admins write the treatment description. */
   canDescribe?: boolean;
+  /** Closing the visit with services and payment (reception, admins, the visit's own doctor). */
+  canClose?: boolean;
   onClose: () => void;
   onChanged: (message: string) => void;
   /** "Karta pacjenta": open the patient's full card. */
@@ -46,6 +48,7 @@ export function AppointmentPanel({
   canEdit,
   canSeeHistory = false,
   canDescribe = false,
+  canClose = false,
   onClose,
   onChanged,
   onOpenPatient,
@@ -231,6 +234,15 @@ export function AppointmentPanel({
             </Button>
           </section>
         </>
+      )}
+
+      {!canEdit && canClose && a.patientId && a.status !== "cancelled" && (
+        // A doctor closes their own visit without the rest of reception's controls.
+        <section>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => setCheckout(true)}>
+            {a.status === "done" ? "Usługi i płatność" : "Zakończ wizytę"}
+          </Button>
+        </section>
       )}
 
       {error && (

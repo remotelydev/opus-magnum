@@ -53,6 +53,12 @@ function scope(user: User, reply: FastifyReply): { staffId: number | null } | nu
   return null;
 }
 
+/** Reception and admins close any visit; a doctor only their own. */
+function mayClose(user: User, staffId: number): boolean {
+  if (user.role === "admin" || user.role === "reception") return true;
+  return user.role === "doctor" && user.staffId !== null && user.staffId === staffId;
+}
+
 function checkRange(q: Range, reply: FastifyReply): boolean {
   const days = (Date.parse(q.to) - Date.parse(q.from)) / 86_400_000;
   if (days < 0) {
@@ -73,7 +79,7 @@ function params(q: Range, staffId: number | null) {
 export function registerStatistics(
   app: FastifyInstance,
   db: Db,
-  guards: { stats: Guard; admin: Guard; desk: Guard },
+  guards: { stats: Guard; admin: Guard; checkout: Guard },
 ): void {
   const read = (req: FastifyRequest<{ Querystring: Range }>, reply: FastifyReply) => {
     const s = scope(req.user!, reply);
@@ -382,37 +388,39 @@ export function registerStatistics(
   );
 
   // --- Closing a visit ------------------------------------------------------------------------
-  // Reception picks the services done (from the price list; the price can be changed) and how the
-  // patient paid. Closing again replaces both. The visit becomes "done".
+  // Reception, admins or the visit's own doctor pick the services done (from the price list; the price
+  // can be changed) and how the patient paid: one way, or split between cash and card. Closing again
+  // replaces both. The visit becomes "done".
   app.get<{ Params: { id: number } }>(
     "/api/appointments/:id/checkout",
-    { config: { access: "staff" }, preHandler: guards.desk, schema: { params: { type: "object", properties: { id: { type: "integer" } } } } },
+    { config: { access: "staff" }, preHandler: guards.checkout, schema: { params: { type: "object", properties: { id: { type: "integer" } } } } },
     async (req, reply) => {
-      const visit = (await db.query("SELECT id FROM appointments WHERE id = $1", [req.params.id])).rows[0];
+      const visit = (await db.query("SELECT id, staff_id FROM appointments WHERE id = $1", [req.params.id])).rows[0];
       if (!visit) return reply.code(404).send({ error: "Nie ma takiej wizyty." });
+      if (!mayClose(req.user!, visit.staff_id)) return reply.code(403).send({ error: "Wizytę zamyka recepcja albo jej lekarz." });
       const [items, paid] = await Promise.all([
         db.query(
           "SELECT service_id, name, price::float AS price FROM appointment_services WHERE appointment_id = $1 ORDER BY position, id",
           [req.params.id],
         ),
-        db.query("SELECT method FROM appointment_payments WHERE appointment_id = $1 ORDER BY id LIMIT 1", [req.params.id]),
+        db.query("SELECT method, amount::float AS amount FROM appointment_payments WHERE appointment_id = $1 ORDER BY id", [req.params.id]),
       ]);
       return {
         items: items.rows.map((r) => ({ serviceId: r.service_id as number | null, name: r.name as string, price: money(r.price) })),
-        method: (paid.rows[0]?.method as string | undefined) ?? null,
+        payments: paid.rows.map((r) => ({ method: r.method as string, amount: money(r.amount) })),
       };
     },
   );
 
-  app.put<{ Params: { id: number }; Body: { items: { serviceId: number; price: number }[]; method: PaymentMethod } }>(
+  app.put<{ Params: { id: number }; Body: { items: { serviceId: number; price: number }[]; payments: { method: PaymentMethod; amount: number }[] } }>(
     "/api/appointments/:id/checkout",
     { config: { access: "staff", audited: true },
-      preHandler: guards.desk,
+      preHandler: guards.checkout,
       schema: {
         params: { type: "object", properties: { id: { type: "integer" } } },
         body: {
           type: "object",
-          required: ["items", "method"],
+          required: ["items", "payments"],
           properties: {
             items: {
               type: "array",
@@ -424,21 +432,41 @@ export function registerStatistics(
                 properties: { serviceId: { type: "integer" }, price: { type: "number", minimum: 0, maximum: 1_000_000 } },
               },
             },
-            method: { enum: Object.keys(PAYMENT_METHODS) },
+            payments: {
+              type: "array",
+              minItems: 1,
+              maxItems: 2,
+              items: {
+                type: "object",
+                required: ["method", "amount"],
+                properties: { method: { enum: Object.keys(PAYMENT_METHODS) }, amount: { type: "number", minimum: 0, maximum: 30_000_000 } },
+              },
+            },
           },
         },
       },
     },
     async (req, reply) => {
-      const { items, method } = req.body;
+      const { items, payments } = req.body;
+      if (new Set(payments.map((p) => p.method)).size !== payments.length) {
+        return reply.code(400).send({ error: "Każda forma płatności tylko raz." });
+      }
+      const total = money(items.reduce((sum, i) => sum + money(i.price), 0));
+      if (Math.abs(money(payments.reduce((sum, p) => sum + money(p.amount), 0)) - total) > 0.001) {
+        return reply.code(400).send({ error: "Płatności nie sumują się do kwoty usług." });
+      }
       const ids = [...new Set(items.map((i) => i.serviceId))];
       const client = await db.connect();
       try {
         await client.query("BEGIN");
-        const visit = (await client.query("SELECT id, patient_id, status FROM appointments WHERE id = $1 FOR UPDATE", [req.params.id])).rows[0];
+        const visit = (await client.query("SELECT id, patient_id, status, staff_id FROM appointments WHERE id = $1 FOR UPDATE", [req.params.id])).rows[0];
         if (!visit) {
           await client.query("ROLLBACK");
           return reply.code(404).send({ error: "Nie ma takiej wizyty." });
+        }
+        if (!mayClose(req.user!, visit.staff_id)) {
+          await client.query("ROLLBACK");
+          return reply.code(403).send({ error: "Wizytę zamyka recepcja albo jej lekarz." });
         }
         if (!visit.patient_id) {
           await client.query("ROLLBACK");
@@ -457,21 +485,20 @@ export function registerStatistics(
         }
         await client.query("DELETE FROM appointment_services WHERE appointment_id = $1", [req.params.id]);
         await client.query("DELETE FROM appointment_payments WHERE appointment_id = $1 AND source = 'desk'", [req.params.id]);
-        let total = 0;
         for (const [i, item] of items.entries()) {
           const price = money(item.price);
-          total += price;
           await client.query(
             "INSERT INTO appointment_services (appointment_id, service_id, name, price, position) VALUES ($1, $2, $3, $4, $5)",
             [req.params.id, item.serviceId, names.get(item.serviceId), price, i],
           );
         }
-        total = money(total);
-        await client.query(
-          `INSERT INTO appointment_payments (appointment_id, method, method_label, amount, source, paid_at, user_id)
-           VALUES ($1, $2, $3, $4, 'desk', now(), $5)`,
-          [req.params.id, method, PAYMENT_METHODS[method], total, req.user!.id],
-        );
+        for (const p of payments.filter((x) => money(x.amount) > 0 || payments.length === 1)) {
+          await client.query(
+            `INSERT INTO appointment_payments (appointment_id, method, method_label, amount, source, paid_at, user_id)
+             VALUES ($1, $2, $3, $4, 'desk', now(), $5)`,
+            [req.params.id, p.method, PAYMENT_METHODS[p.method], money(p.amount), req.user!.id],
+          );
+        }
         // The first service becomes the visit's service, so the calendar shows what was done.
         await client.query("UPDATE appointments SET status = 'done', service_id = $2, updated_at = now() WHERE id = $1", [
           req.params.id,
@@ -479,7 +506,7 @@ export function registerStatistics(
         ]);
         await audit(client, req.user!.id, "appointment.checkout", "appointment", req.params.id, {
           services: items.map((i) => i.serviceId),
-          method,
+          payments: payments.map((p) => ({ method: p.method, amount: money(p.amount) })),
           total,
         });
         await client.query("COMMIT");

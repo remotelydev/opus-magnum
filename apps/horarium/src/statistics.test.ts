@@ -29,6 +29,13 @@ describe("statistics, closing visits and the cash register", { skip: TEST_DATABA
     return { status: res.statusCode, body: res.body ? res.json() : null };
   }
 
+  /** Closes a visit paid in one way; `split` gives the cash part of a cash-and-card payment instead. */
+  function close(id: number, who: string, items: { serviceId: number; price: number }[], method: string, split?: number) {
+    const total = items.reduce((sum, i) => sum + i.price, 0);
+    const payments = split === undefined ? [{ method, amount: total }] : [{ method: "cash", amount: split }, { method: "card", amount: total - split }];
+    return call("PUT", `/api/appointments/${id}/checkout`, who, { items, payments });
+  }
+
   async function visit(staffId: number, patientId: number | null, startsAt: string, site = "turek", minutes = 30) {
     const ends = new Date(Date.parse(startsAt) + minutes * 60_000).toISOString();
     const { rows } = await db.query<{ id: number }>(
@@ -77,10 +84,7 @@ describe("statistics, closing visits and the cash register", { skip: TEST_DATABA
 
   test("reception closes a visit: services with changed prices, one payment, status done", async () => {
     const id = await visit(drA, anna, "2026-11-02T09:00:00Z");
-    const closed = await call("PUT", `/api/appointments/${id}/checkout`, "recepcja", {
-      items: [{ serviceId: filling, price: 300 }, { serviceId: checkup, price: 100 }],
-      method: "cash",
-    });
+    const closed = await close(id, "recepcja", [{ serviceId: filling, price: 300 }, { serviceId: checkup, price: 100 }], "cash");
     assert.equal(closed.status, 200);
     assert.equal(closed.body.total, 400);
     const back = await call("GET", `/api/appointments/${id}/checkout`, "recepcja");
@@ -89,39 +93,61 @@ describe("statistics, closing visits and the cash register", { skip: TEST_DATABA
         { serviceId: filling, name: "Wypełnienie", price: 300 },
         { serviceId: checkup, name: "Przegląd", price: 100 },
       ],
-      method: "cash",
+      payments: [{ method: "cash", amount: 400 }],
     });
     const row = (await db.query("SELECT status, service_id FROM appointments WHERE id = $1", [id])).rows[0];
     assert.deepEqual(row, { status: "done", service_id: filling });
 
     // Closing again replaces, never adds up.
-    await call("PUT", `/api/appointments/${id}/checkout`, "recepcja", { items: [{ serviceId: filling, price: 280 }], method: "card" });
+    await close(id, "recepcja", [{ serviceId: filling, price: 280 }], "card");
     const pays = await db.query("SELECT method, amount::float AS amount FROM appointment_payments WHERE appointment_id = $1", [id]);
     assert.deepEqual(pays.rows, [{ method: "card", amount: 280 }]);
-    await call("PUT", `/api/appointments/${id}/checkout`, "recepcja", { items: [{ serviceId: filling, price: 300 }], method: "cash" });
+    await close(id, "recepcja", [{ serviceId: filling, price: 300 }], "cash");
   });
 
-  test("closing needs services from the price list and cash or card; doctors do not close", async () => {
+  test("a payment can be split between cash and card; the parts must add up", async () => {
+    const id = await visit(drB, anna, "2027-02-01T09:00:00Z");
+    const items = [{ serviceId: filling, price: 400 }];
+    assert.equal((await close(id, "recepcja", items, "cash", 150)).status, 200);
+    const back = await call("GET", `/api/appointments/${id}/checkout`, "recepcja");
+    assert.deepEqual(back.body.payments, [{ method: "cash", amount: 150 }, { method: "card", amount: 250 }]);
+    const wrong = await call("PUT", `/api/appointments/${id}/checkout`, "recepcja", {
+      items,
+      payments: [{ method: "cash", amount: 100 }, { method: "card", amount: 100 }],
+    });
+    assert.equal(wrong.status, 400);
+    const twice = await call("PUT", `/api/appointments/${id}/checkout`, "recepcja", {
+      items,
+      payments: [{ method: "cash", amount: 200 }, { method: "cash", amount: 200 }],
+    });
+    assert.equal(twice.status, 400);
+  });
+
+  test("closing needs services from the price list and cash or card; a doctor closes only their own visits", async () => {
     const id = await visit(drA, jan, "2026-11-03T09:00:00Z");
-    assert.equal((await call("PUT", `/api/appointments/${id}/checkout`, "recepcja", { items: [], method: "cash" })).status, 400);
-    assert.equal((await call("PUT", `/api/appointments/${id}/checkout`, "recepcja", { items: [{ serviceId: filling, price: 1 }], method: "blik" })).status, 400);
-    assert.equal((await call("PUT", `/api/appointments/${id}/checkout`, "recepcja", { items: [{ serviceId: 9999, price: 1 }], method: "cash" })).status, 400);
-    assert.equal((await call("PUT", `/api/appointments/${id}/checkout`, "dr.a", { items: [{ serviceId: filling, price: 1 }], method: "cash" })).status, 403);
+    assert.equal((await close(id, "recepcja", [], "cash")).status, 400);
+    assert.equal((await close(id, "recepcja", [{ serviceId: filling, price: 1 }], "blik")).status, 400);
+    assert.equal((await close(id, "recepcja", [{ serviceId: 9999, price: 1 }], "cash")).status, 400);
+    const other = await visit(drB, jan, "2027-01-04T09:00:00Z");
+    assert.equal((await close(other, "dr.a", [{ serviceId: filling, price: 1 }], "cash")).status, 403);
+    assert.equal((await close(other, "higienistka", [{ serviceId: filling, price: 1 }], "cash")).status, 403);
+    const own = await visit(drA, jan, "2027-01-04T09:00:00Z");
+    assert.equal((await close(own, "dr.a", [{ serviceId: filling, price: 250 }], "cash")).status, 200);
     const block = await visit(drB, null, "2026-11-03T12:00:00Z");
-    assert.equal((await call("PUT", `/api/appointments/${block}/checkout`, "recepcja", { items: [{ serviceId: filling, price: 1 }], method: "cash" })).status, 400);
+    assert.equal((await close(block, "recepcja", [{ serviceId: filling, price: 1 }], "cash")).status, 400);
   });
 
   test("financial report: visits, time, money and payment methods; per clinic and both", async () => {
     // Dr B in Turek, card; Dr A in Poddębice, an imported visit paid by transfer.
     const b = await visit(drB, jan, "2026-11-04T09:00:00Z", "turek", 60);
-    await call("PUT", `/api/appointments/${b}/checkout`, "recepcja", { items: [{ serviceId: checkup, price: 150 }], method: "card" });
+    await close(b, "recepcja", [{ serviceId: checkup, price: 150 }], "card");
     const old = await visit(drA, jan, "2026-11-05T09:00:00Z", "poddebice", 45);
     await db.query("UPDATE appointments SET status = 'done', source = 'import' WHERE id = $1", [old]);
     await db.query("INSERT INTO appointment_payments (appointment_id, method, method_label, amount, source) VALUES ($1, 'transfer', 'przelew', 500, 'import')", [old]);
     // Not counted: booked, and outside the range.
     await visit(drA, anna, "2026-11-06T09:00:00Z");
     const late = await visit(drA, anna, "2026-12-01T09:00:00Z");
-    await call("PUT", `/api/appointments/${late}/checkout`, "recepcja", { items: [{ serviceId: checkup, price: 100 }], method: "cash" });
+    await close(late, "recepcja", [{ serviceId: checkup, price: 100 }], "cash");
 
     const all = (await call("GET", "/api/stats/financial?site=all&from=2026-11-01&to=2026-11-30", "admin")).body;
     assert.deepEqual(all.totals, { visits: 3, minutes: 135, revenue: 950 });
@@ -190,18 +216,20 @@ describe("statistics, closing visits and the cash register", { skip: TEST_DATABA
   test("cash register: counted balance plus cash at visits and money in, minus money out", async () => {
     assert.equal((await call("POST", "/api/cash", "recepcja", { siteId: "turek", kind: "in", amount: 10 })).status, 403);
     assert.equal((await call("GET", "/api/cash?site=all&from=2026-11-01&to=2026-11-30", "admin")).status, 400);
-    // Before anyone counts it: all cash taken so far in Turek (300 on 2.11 and 100 on 1.12).
+    // Before anyone counts it: all cash ever taken in Turek (300 on 2.11, 100 on 1.12, and in 2027 250 and
+    // the cash part 150 of a split payment). The list shows cash by when it was taken: the 2027 visits
+    // were paid today.
     let cash = (await call("GET", "/api/cash?site=turek&from=2026-11-01&to=2026-12-31", "admin")).body;
-    assert.equal(cash.balance, 400);
+    assert.equal(cash.balance, 800);
     assert.equal(cash.open, false);
-    assert.equal(cash.visits.length, 2);
+    assert.equal(cash.visits.length, 4);
     assert.equal(cash.visits[0].patientName, "Anna Nowak");
 
     assert.equal((await call("POST", "/api/cash", "admin", { siteId: "turek", kind: "open", amount: 1000 })).status, 201);
     await call("POST", "/api/cash", "admin", { siteId: "turek", kind: "in", amount: 50, note: "rozmienione" });
     await call("POST", "/api/cash", "admin", { siteId: "turek", kind: "out", amount: 20, note: "kawa" });
     const id = await visit(drB, anna, new Date().toISOString());
-    await call("PUT", `/api/appointments/${id}/checkout`, "recepcja", { items: [{ serviceId: checkup, price: 100 }], method: "cash" });
+    await close(id, "recepcja", [{ serviceId: checkup, price: 100 }], "cash");
     const today = new Date().toISOString().slice(0, 10);
     cash = (await call("GET", `/api/cash?site=turek&from=${today}&to=${today}`, "admin")).body;
     assert.equal(cash.balance, 1130);

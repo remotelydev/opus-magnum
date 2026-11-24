@@ -4,6 +4,8 @@ export interface User {
   login: string;
   name: string;
   role: "admin" | "reception" | "doctor" | "hygienist";
+  /** The person's staff card (doctors): their own visits and numbers. */
+  staffId: number | null;
   /** Features switched on for this login only, e.g. "hidden_reports". */
   features: string[];
 }
@@ -12,6 +14,15 @@ export const isClinical = (role: User["role"]) => role === "doctor" || role === 
 
 export type PaymentMethod = "cash" | "card";
 export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = { cash: "Gotówka", card: "Karta" };
+export interface CheckoutPayment {
+  method: PaymentMethod;
+  amount: number;
+}
+/** Whose visits this login closes: anyone's (reception, admins), one person's (a doctor), or none. */
+export function closesVisitsOf(user: User): "all" | number | null {
+  if (user.role === "admin" || user.role === "reception") return "all";
+  return user.role === "doctor" ? user.staffId : null;
+}
 export interface CheckoutItem {
   serviceId: number | null;
   name: string;
@@ -364,9 +375,10 @@ export const api = {
       notifyPatient: boolean;
     }>,
   ) => request<{ ok: true; endsAt: string; warnings: string[]; sms?: string }>("PATCH", `/api/appointments/${id}`, body),
-  checkout: (id: number) => request<{ items: CheckoutItem[]; method: string | null }>("GET", `/api/appointments/${id}/checkout`),
-  saveCheckout: (id: number, items: { serviceId: number; price: number }[], method: PaymentMethod) =>
-    request<{ ok: true; total: number }>("PUT", `/api/appointments/${id}/checkout`, { items, method }),
+  checkout: (id: number) =>
+    request<{ items: CheckoutItem[]; payments: { method: string; amount: number }[] }>("GET", `/api/appointments/${id}/checkout`),
+  saveCheckout: (id: number, items: { serviceId: number; price: number }[], payments: CheckoutPayment[]) =>
+    request<{ ok: true; total: number }>("PUT", `/api/appointments/${id}/checkout`, { items, payments }),
   financial: (r: StatsRange) => request<FinancialReport>("GET", `/api/stats/financial?${qs({ ...r })}`),
   serviceStats: (r: StatsRange) => request<ServiceStat[]>("GET", `/api/stats/services?${qs({ ...r })}`),
   returning: (r: StatsRange) => request<ReturningStat[]>("GET", `/api/stats/returning?${qs({ ...r })}`),

@@ -85,7 +85,7 @@ apps/horarium/preview/share.sh stop
 
 "Statystyki", as in Versum: financial report (visits, time, money, payment methods, per person), staff activity, service popularity, returning clients, work time and the cash register of each clinic, each for Turek, Poddębice or both and any date range, with a CSV download that opens in Excel. Admins see everything; a doctor sees only their own rows and no cash register; reception and hygienists do not see statistics.
 
-Money comes from closing a visit: reception picks the services done from the price list (the suggested price, the lower end of a range, can be changed by clicking it) and cash or card. Dental care is VAT-exempt, so there is one amount. The Versum history only has amounts, so it counts as "Usługa spoza cennika".
+Money comes from closing a visit: reception, an admin or the visit's own doctor picks the services done from the price list (the suggested price, the lower end of a range, can be changed by clicking it) and cash or card, or both split. Dental care is VAT-exempt, so there is one amount. The Versum history only has amounts, so it counts as "Usługa spoza cennika".
 
 ## Patients from Versum
 

@@ -13,7 +13,7 @@ import { StaffPage } from "./components/StaffPage.tsx";
 import { StatisticsPage } from "./components/StatisticsPage.tsx";
 import { Login } from "./components/Login.tsx";
 import { BottomNav, Sidebar, type View } from "./components/Sidebar.tsx";
-import { api, ApiError, isClinical, type Service, type Site, type Staff, type User } from "./lib/api.ts";
+import { api, ApiError, closesVisitsOf, isClinical, type Service, type Site, type Staff, type User } from "./lib/api.ts";
 import { readChoice, saveChoice, selectedIds, workHours, workingIds, type ColumnChoice } from "./lib/columns.ts";
 import { readCollapsed, saveCollapsed } from "./lib/sidebar.ts";
 import { ALL_SITES, calendarColumns, siteColor } from "./lib/sites.ts";
@@ -381,6 +381,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               canEdit={!isClinical(user.role)}
               canSeeHistory={user.role === "admin"}
               canDescribe={user.role === "admin" || isClinical(user.role)}
+              closesVisitsOf={closesVisitsOf(user)}
               showCancelled={showCancelled}
             />
           </div>
