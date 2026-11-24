@@ -63,6 +63,24 @@ export interface WorktimeStat {
   absenceDays: number;
   visitMinutes: number;
 }
+/** Reports the clinic does not use yet (client origins, commissions): only logins with this feature. */
+export const HIDDEN_REPORTS = "hidden_reports";
+export const seesHiddenReports = (user: User) => user.features.includes(HIDDEN_REPORTS);
+export interface OriginStat {
+  origin: string | null;
+  patients: number;
+  visits: number;
+  revenue: number;
+  average: number;
+}
+export interface CommissionStat {
+  staffId: number;
+  siteId: string;
+  visits: number;
+  revenue: number;
+  rate: number;
+  commission: number;
+}
 export type CashKind = "in" | "out" | "open" | "close";
 export interface CashReport {
   balance: number;
@@ -384,6 +402,13 @@ export const api = {
   returning: (r: StatsRange) => request<ReturningStat[]>("GET", `/api/stats/returning?${qs({ ...r })}`),
   worktime: (r: StatsRange) => request<WorktimeStat[]>("GET", `/api/stats/worktime?${qs({ ...r })}`),
   cash: (r: StatsRange) => request<CashReport>("GET", `/api/cash?${qs({ ...r })}`),
+  originStats: (r: StatsRange) => request<OriginStat[]>("GET", `/api/stats/origins?${qs({ ...r })}`),
+  origins: () => request<{ origin: string; patients: number }[]>("GET", "/api/origins"),
+  setOrigin: (patientId: number, origin: string | null) =>
+    request<{ ok: true; origin: string | null }>("PUT", `/api/patients/${patientId}/origin`, { origin }),
+  commissionStats: (r: StatsRange) => request<CommissionStat[]>("GET", `/api/stats/commissions?${qs({ ...r })}`),
+  commissionRates: () => request<{ staffId: number; rate: number }[]>("GET", "/api/commissions"),
+  setCommission: (staffId: number, rate: number) => request<{ ok: true; rate: number }>("PUT", `/api/commissions/${staffId}`, { rate }),
   addCash: (body: { siteId: string; kind: CashKind; amount: number; note?: string | null }) =>
     request<{ id: number }>("POST", "/api/cash", body),
   saveTreatment: (id: number, text: string | null) =>
