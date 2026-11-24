@@ -347,6 +347,7 @@ export function DayView({
           appointment={selectedAppt}
           staff={staff}
           sites={sites}
+          services={services}
           onOpenPatient={onOpenPatient}
           onOpenVisit={onOpenVisit}
           canEdit={canEdit}

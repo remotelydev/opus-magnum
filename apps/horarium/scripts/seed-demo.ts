@@ -8,7 +8,7 @@
 //
 // Runs on an empty database. A database this script filled earlier (it has the demo admin) that is still
 // smaller than this scale is emptied and filled again. Any other database with patients is left alone.
-import { createUser } from "../src/auth.js";
+import { createUser, HIDDEN_REPORTS, type Role } from "../src/auth.js";
 import { createPool, migrate, type Db } from "../src/db.js";
 import { STAFF_PALETTE } from "../src/settings.js";
 import { importVersumPatients } from "../src/versum-patients.js";
@@ -289,7 +289,7 @@ type Queryable = Pick<Db, "query">;
 
 /** Empties every table the demo seed fills. Logins and sessions stay, so a signed-in browser stays signed in. */
 async function resetDemo(client: Queryable) {
-  await client.query(`TRUNCATE appointment_payments, import_raw, appointments, schedules, work_patterns, staff_sites, patients, services,
+  await client.query(`TRUNCATE appointment_payments, appointment_services, cash_operations, import_raw, appointments, schedules, work_patterns, staff_sites, patients, services,
                         opening_hours, opening_exceptions, import_refs, audit_log RESTART IDENTITY`);
   await client.query("UPDATE users SET staff_id = NULL");
   await client.query("DELETE FROM staff");
@@ -500,6 +500,48 @@ async function demoVersumHistory(client: Pick<Db, "query">) {
   );
 }
 
+/** Visits closed at the desk in the last two months (services from the price list, cash or card), so the
+ *  statistics have something to show next to the Versum history. Only once. */
+async function demoStatistics(client: Pick<Db, "query">) {
+  const done = await client.query("SELECT 1 FROM appointment_services LIMIT 1");
+  if (done.rowCount) return;
+  const closed = await client.query<{ id: number }>(
+    `INSERT INTO appointment_services (appointment_id, service_id, name, price, position)
+     SELECT a.id, s.id, s.name, coalesce(s.price_min, s.price_max, 200) + (a.id % 3) * 50, 0
+       FROM appointments a JOIN services s ON s.id = a.service_id
+      WHERE a.source = 'desk' AND a.status = 'done' AND a.patient_id IS NOT NULL
+        AND a.starts_at > now() - interval '60 days' AND a.starts_at < now()
+     RETURNING appointment_id AS id`,
+  );
+  await client.query(
+    `INSERT INTO appointment_payments (appointment_id, method, method_label, amount, source, paid_at)
+     SELECT a.id, CASE WHEN a.id % 5 = 0 THEN 'card' ELSE 'cash' END, CASE WHEN a.id % 5 = 0 THEN 'karta' ELSE 'gotówka' END,
+            (SELECT sum(price) FROM appointment_services x WHERE x.appointment_id = a.id), 'desk', a.ends_at
+       FROM appointments a WHERE a.id = ANY($1)`,
+    [closed.rows.map((r) => r.id)],
+  );
+}
+
+/** Demo logins, all with the demo password: reception, admin, Bartosz (admin who also sees the reports the
+ *  clinic does not use yet), a doctor tied to the first person in the calendar, and a hygienist. */
+async function demoLogins(client: Pick<Db, "query">) {
+  const people: [string, string, Role, string[]][] = [
+    ["recepcja", "Recepcja (demo)", "reception", []],
+    ["admin", DEMO_ADMIN_NAME, "admin", []],
+    ["bartosz", "Bartosz (demo)", "admin", [HIDDEN_REPORTS]],
+    ["lekarz", "Lekarz (demo)", "doctor", []],
+    ["higienistka", "Higienistka (demo)", "hygienist", []],
+  ];
+  for (const [login, name, role, features] of people) {
+    const has = await client.query("SELECT 1 FROM users WHERE login = $1", [login]);
+    if (!has.rowCount) await createUser(client as Db, { login, name, role, password: DEMO_PASSWORD, features });
+  }
+  await client.query(
+    `UPDATE users SET staff_id = (SELECT id FROM staff WHERE kind = 'person' AND active ORDER BY sort_order, id LIMIT 1)
+      WHERE login = 'lekarz' AND staff_id IS NULL`,
+  );
+}
+
 const db = createPool();
 try {
   await migrate(db);
@@ -515,6 +557,8 @@ try {
       await demoTreatmentNotes(db);
       await demoVersumHistory(db);
       await addVersumDemo(db);
+      await demoStatistics(db);
+      await demoLogins(db);
       console.log("demo data already at full scale");
       process.exit(0);
     }
@@ -539,12 +583,10 @@ try {
   })();
 
   await addVersumDemo(db);
-  for (const [login, name, role] of [["recepcja", "Recepcja (demo)", "reception"], ["admin", DEMO_ADMIN_NAME, "admin"]] as const) {
-    const has = await db.query("SELECT 1 FROM users WHERE login = $1", [login]);
-    if (!has.rowCount) await createUser(db, { login, name, role, password: DEMO_PASSWORD });
-  }
+  await demoStatistics(db);
+  await demoLogins(db);
   console.log(
-    `demo data: ${counts.staff} staff, ${counts.services} services, ${counts.patients} patients, ${counts.visits} visits, logins recepcja/admin`,
+    `demo data: ${counts.staff} staff, ${counts.services} services, ${counts.patients} patients, ${counts.visits} visits, logins recepcja/admin/bartosz/lekarz/higienistka`,
   );
 } finally {
   await db.end();

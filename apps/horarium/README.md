@@ -36,6 +36,8 @@ Create the first admin login (password from the environment, at least 10 charact
 CLINIC_PASSWORD='change-me-please' pnpm --filter horarium user:create admin admin "Administrator"
 ```
 
+Roles: `admin`, `reception`, `doctor` (tie the login to the person's staff card so their statistics show), `hygienist`. A login can also get features of its own: `--features=hidden_reports` shows the reports the clinic does not use yet (tips, client origins, commissions, stock).
+
 ```bash
 pnpm --filter horarium build
 ```
@@ -46,7 +48,7 @@ pnpm --filter horarium dev
 
 Open http://127.0.0.1:8790. For UI work with hot reload, run `dev` and `dev:web` side by side and open http://127.0.0.1:5174 (it proxies `/api`).
 
-Demo data at the clinic's real scale (made-up: 26 935 patients, 24 staff, 35 services, about 45 visits a day; only on an empty database or one the seed filled earlier with a smaller set; logins `recepcja` and `admin`, password `demo-demo-demo` unless `CLINIC_PASSWORD` is set):
+Demo data at the clinic's real scale (made-up: 26 935 patients, 24 staff, 35 services, about 45 visits a day; only on an empty database or one the seed filled earlier with a smaller set; logins `recepcja`, `admin`, `bartosz` (admin with `hidden_reports`), `lekarz` and `higienistka`, password `demo-demo-demo` unless `CLINIC_PASSWORD` is set):
 
 ```bash
 pnpm --filter horarium seed:demo
@@ -78,6 +80,12 @@ apps/horarium/preview/share.sh
 ```bash
 apps/horarium/preview/share.sh stop
 ```
+
+## Statistics
+
+"Statystyki", as in Versum: financial report (visits, time, money, payment methods, per person), staff activity, service popularity, returning clients, work time and the cash register of each clinic, each for Turek, Poddębice or both and any date range, with a CSV download that opens in Excel. Admins see everything; a doctor sees only their own rows and no cash register; reception and hygienists do not see statistics.
+
+Money comes from closing a visit: reception picks the services done from the price list (the suggested price, the lower end of a range, can be changed by clicking it) and cash or card. Dental care is VAT-exempt, so there is one amount. The Versum history only has amounts, so it counts as "Usługa spoza cennika".
 
 ## Patients from Versum
 
