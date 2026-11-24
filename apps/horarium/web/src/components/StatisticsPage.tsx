@@ -5,27 +5,33 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import {
   api,
   type CashKind,
+  type CommissionStat,
   type FinancialReport,
+  type OriginStat,
   type ReturningStat,
   type Site,
   type Staff,
   type StatsRange,
   type User,
   type WorktimeStat,
+  seesHiddenReports,
 } from "../lib/api.ts";
 import { formatMoney } from "../lib/money.ts";
 import { downloadCsv, formatDuration, percent, PRESET_LABEL, presetRange, type Preset } from "../lib/reports.ts";
 import { ALL_SITES, siteColor, siteName } from "../lib/sites.ts";
 import { todayInClinic } from "../lib/time.ts";
 
-type Tab = "financial" | "employees" | "services" | "returning" | "worktime" | "cash";
-const TABS: { id: Tab; label: string; adminOnly?: boolean }[] = [
+type Tab = "financial" | "employees" | "services" | "returning" | "worktime" | "cash" | "origins" | "commissions";
+const TABS: { id: Tab; label: string; adminOnly?: boolean; hidden?: boolean }[] = [
   { id: "financial", label: "Raport finansowy" },
   { id: "employees", label: "Aktywność pracowników" },
   { id: "services", label: "Popularność usług" },
   { id: "returning", label: "Powracalność klientów" },
   { id: "worktime", label: "Czas pracy" },
   { id: "cash", label: "Stan kasy", adminOnly: true },
+  // Reports the clinic does not use yet: only logins with the hidden_reports feature.
+  { id: "origins", label: "Pochodzenie klientów", hidden: true },
+  { id: "commissions", label: "Prowizje", hidden: true },
 ];
 
 type Csv = (string | number)[][];
@@ -46,7 +52,8 @@ export function StatisticsPage({ user, sites, staff }: { user: User; sites: Site
   }, [site, preset, custom]);
   const [csv, setCsv] = useState<Csv | null>(null);
   const staffName = useCallback((id: number) => staff.find((s) => s.id === id)?.name ?? `#${id}`, [staff]);
-  const tabs = TABS.filter((t) => admin || !t.adminOnly);
+  const hidden = seesHiddenReports(user);
+  const tabs = TABS.filter((t) => (admin || !t.adminOnly) && (hidden || !t.hidden));
   // The register belongs to one clinic: picking it on "Wszystkie" switches to the first clinic.
   const cashSite = site === ALL_SITES ? (sites[0]?.id ?? "turek") : site;
 
@@ -124,6 +131,8 @@ export function StatisticsPage({ user, sites, staff }: { user: User; sites: Site
         {tab === "returning" && <Returning range={range} staffName={staffName} onCsv={setCsv} />}
         {tab === "worktime" && <Worktime range={range} staffName={staffName} onCsv={setCsv} />}
         {tab === "cash" && admin && <Cash range={{ ...range, site: cashSite }} siteLabel={siteName(sites, cashSite)} onCsv={setCsv} />}
+        {tab === "origins" && hidden && <Origins range={range} staffName={staffName} onCsv={setCsv} />}
+        {tab === "commissions" && hidden && <Commissions range={range} sites={sites} staff={staff} staffName={staffName} onCsv={setCsv} />}
       </div>
     </div>
   );
@@ -463,6 +472,112 @@ function Worktime({ range, staffName, onCsv }: ReportProps) {
         foot={["Łącznie", formatDuration(sum("workMinutes")), sum("workDays"), sum("absenceDays"), formatDuration(sum("visitMinutes"))]}
       />
       <p className="text-xs text-muted-foreground">Z grafiku pracy. Nieobecności nie mają jeszcze rodzaju (urlop, choroba, szkolenie), więc liczą się razem.</p>
+    </div>
+  );
+}
+
+const NO_ORIGIN = "Nie wpisano";
+
+function Origins({ range, onCsv }: ReportProps) {
+  const { data, error } = useReport(api.originStats, range);
+  const rows = data ?? [];
+  const total = rows.reduce((t, r) => ({ patients: t.patients + r.patients, visits: t.visits + r.visits, revenue: t.revenue + r.revenue }), { patients: 0, visits: 0, revenue: 0 });
+  useEffect(() => {
+    if (!data) return onCsv(null);
+    onCsv([
+      ["Pochodzenie", "Klienci, którzy odwiedzili", "Wizyty", "Obrót", "Średni obrót na klienta"],
+      ...rows.map((r: OriginStat) => [r.origin ?? NO_ORIGIN, r.patients, r.visits, r.revenue, r.average]),
+      ["Podsumowanie", total.patients, total.visits, total.revenue, total.patients ? Math.round((total.revenue / total.patients) * 100) / 100 : 0],
+    ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+  if (!data) return <State error={error} loading />;
+  return (
+    <div className="space-y-2">
+      <Table
+        head={["Pochodzenie", "Klienci, którzy odwiedzili", "Wizyty", "Obrót", "Średni obrót na klienta"]}
+        rows={rows.map((r) => [r.origin ?? NO_ORIGIN, r.patients, r.visits, formatMoney(r.revenue), formatMoney(r.average)])}
+        foot={["Podsumowanie", total.patients, total.visits, formatMoney(total.revenue), formatMoney(total.patients ? total.revenue / total.patients : 0)]}
+      />
+      <p className="text-xs text-muted-foreground">
+        Pacjenci z zakończoną wizytą w tym okresie, według pola „Pochodzenie” w karcie pacjenta (z Versum albo wpisanego w Horarium).
+      </p>
+    </div>
+  );
+}
+
+function Commissions({ range, sites, staff, staffName, onCsv }: ReportProps & { sites: Site[]; staff: Staff[] }) {
+  const { data, error, reload } = useReport(api.commissionStats, range);
+  const [rates, setRates] = useState<Map<number, number> | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  useEffect(() => {
+    api.commissionRates().then((list) => setRates(new Map(list.map((r) => [r.staffId, r.rate])))).catch((e: Error) => setSaveError(e.message));
+  }, []);
+  const rows = useMemo(() => [...(data ?? [])].sort((a, b) => b.commission - a.commission || b.revenue - a.revenue), [data]);
+  const name = (r: CommissionStat) => `${staffName(r.staffId)} (${siteName(sites, r.siteId)})`;
+  const total = rows.reduce((t, r) => ({ visits: t.visits + r.visits, revenue: t.revenue + r.revenue, commission: t.commission + r.commission }), { visits: 0, revenue: 0, commission: 0 });
+  useEffect(() => {
+    if (!data) return onCsv(null);
+    onCsv([
+      ["Pracownik", "Wizyty", "Obrót z usług", "Stawka (%)", "Prowizja"],
+      ...rows.map((r) => [name(r), r.visits, r.revenue, r.rate, r.commission]),
+      ["Podsumowanie", total.visits, total.revenue, "", total.commission],
+    ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+  const save = async (staffId: number, text: string) => {
+    const rate = Number(text.replace(/\s/g, "").replace(",", ".") || 0);
+    if (!Number.isFinite(rate) || rate < 0 || rate > 100) return setSaveError("Stawka od 0 do 100%.");
+    if ((rates?.get(staffId) ?? 0) === rate) return;
+    try {
+      await api.setCommission(staffId, rate);
+      setRates((m) => new Map(m).set(staffId, rate));
+      setSaveError(null);
+      reload();
+    } catch (e) {
+      setSaveError((e as Error).message);
+    }
+  };
+  if (!data) return <State error={error} loading />;
+  return (
+    <div className="space-y-4">
+      <Table
+        head={["Pracownik", "Wizyty", "Obrót z usług", "Stawka", "Prowizja"]}
+        rows={rows.map((r) => [name(r), r.visits, formatMoney(r.revenue), `${String(r.rate).replace(".", ",")}%`, formatMoney(r.commission)])}
+        foot={["Podsumowanie", total.visits, formatMoney(total.revenue), "", formatMoney(total.commission)]}
+      />
+      <p className="text-xs text-muted-foreground">
+        Prowizja to stawka osoby razy to, co zapłacono za jej zakończone wizyty w tym okresie. Obowiązuje obecna stawka, także dla
+        wcześniejszych miesięcy. Bez produktów (magazyn pominięty).
+      </p>
+      <section className="space-y-2">
+        <h2 className="text-sm font-medium">Stawki prowizji</h2>
+        {saveError && <p role="alert" className="text-sm text-destructive">{saveError}</p>}
+        {rates === null ? (
+          <p className="text-sm text-muted-foreground">Ładowanie…</p>
+        ) : (
+          <ul className="grid max-w-xl gap-1 text-sm sm:grid-cols-2">
+            {staff
+              .filter((s) => s.active && s.kind === "person")
+              .map((s) => (
+                <li key={s.id} className="flex items-center justify-between gap-2">
+                  <label htmlFor={`rate-${s.id}`} className="min-w-0 flex-1 truncate">{s.name}</label>
+                  <span className="flex items-center gap-1">
+                    <Input
+                      id={`rate-${s.id}`}
+                      inputMode="decimal"
+                      defaultValue={String(rates.get(s.id) ?? 0).replace(".", ",")}
+                      onBlur={(e) => save(s.id, e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                      className="h-8 w-20 text-right"
+                    />
+                    %
+                  </span>
+                </li>
+              ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

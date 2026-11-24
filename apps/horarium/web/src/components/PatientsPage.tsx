@@ -1,7 +1,7 @@
 import { Button } from "@opus-magnum/dentaplus-ui/components/button";
 import { StatusBadge } from "@opus-magnum/dentaplus-ui/components/status";
 import { Input, Label } from "@opus-magnum/dentaplus-ui/components/field";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { api, type Appointment, type Patient, type PatientCardDetails, type PatientPage, type Service, type Site, type Staff } from "../lib/api.ts";
 import { ALL_SITES } from "../lib/sites.ts";
 import { formatMinutes, toClinicTime, todayInClinic } from "../lib/time.ts";
@@ -19,6 +19,8 @@ interface Props {
   site: string;
   canEdit: boolean;
   canSeeHistory: boolean;
+  /** Logins with hidden reports set where a patient came from (for "Pochodzenie klientów"). */
+  canSetOrigin?: boolean;
   /** Jump to the calendar on the day and site of a visit, with that visit open. */
   onOpenDay: (site: string, date: string, appointmentId: number) => void;
   /** Card to open straight away, e.g. from "Karta pacjenta" in the calendar's visit panel. */
@@ -37,6 +39,7 @@ export function PatientsPage({
   site,
   canEdit,
   canSeeHistory,
+  canSetOrigin = false,
   onOpenDay,
   initialPatientId = null,
 }: Props) {
@@ -100,6 +103,7 @@ export function PatientsPage({
             site={site}
             canEdit={canEdit}
             canSeeHistory={canSeeHistory}
+            canSetOrigin={canSetOrigin}
             onOpenDay={onOpenDay}
             onChanged={() => setReloadKey((k) => k + 1)}
           />
@@ -217,6 +221,7 @@ function PatientCardView({
   site,
   canEdit,
   canSeeHistory,
+  canSetOrigin = false,
   onOpenDay,
   onChanged,
 }: Omit<Props, "onOpenDay" | "initialPatientId"> & {
@@ -326,7 +331,7 @@ function PatientCardView({
         />
       )}
 
-      <PatientDetails card={card} />
+      <PatientDetails card={card} canSetOrigin={canSetOrigin} onOriginSaved={(origin) => setCard({ ...card, origin })} />
 
       <section className="space-y-2">
         <h2 className="text-sm font-medium">Nadchodzące wizyty</h2>
@@ -351,7 +356,15 @@ function PatientCardView({
 const MONTHS = ["stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca", "lipca", "sierpnia", "września", "października", "listopada", "grudnia"];
 
 /** Personal details, consents and where the card came from. Rows without a value are left out. */
-function PatientDetails({ card }: { card: PatientCard }) {
+function PatientDetails({
+  card,
+  canSetOrigin,
+  onOriginSaved,
+}: {
+  card: PatientCard;
+  canSetOrigin: boolean;
+  onOriginSaved: (origin: string | null) => void;
+}) {
   const address = [
     [card.street, [card.houseNumber, card.unitNumber].filter(Boolean).join("/")].filter(Boolean).join(" "),
     [card.postalCode, card.city].filter(Boolean).join(" "),
@@ -366,7 +379,7 @@ function PatientDetails({ card }: { card: PatientCard }) {
     card.emailConsent && "przypomnienia e-mail",
     card.marketingConsent && "informacje handlowe",
   ].filter(Boolean);
-  const rows: [string, string | null][] = [
+  const rows: [string, ReactNode][] = [
     ["Płeć", card.gender === "female" ? "kobieta" : card.gender === "male" ? "mężczyzna" : null],
     ["PESEL", card.pesel],
     ["Numer karty", card.cardNumber],
@@ -374,7 +387,7 @@ function PatientDetails({ card }: { card: PatientCard }) {
     ["NIP", card.taxId],
     ["Imieniny", nameDay],
     ["Grupy", card.groups.length ? card.groups.join(", ") : null],
-    ["Pochodzenie", card.origin],
+    ["Pochodzenie", canSetOrigin ? <OriginField patientId={card.id} value={card.origin} onSaved={onOriginSaved} /> : card.origin],
     ["Polecił(a)", card.referredBy?.name ?? null],
     ["Zgody", consents.length ? consents.join(", ") : "brak"],
     [
@@ -396,6 +409,57 @@ function PatientDetails({ card }: { card: PatientCard }) {
           ))}
       </dl>
     </section>
+  );
+}
+
+/** Where the patient came from, set by logins with hidden reports; offers the origins already in use. */
+function OriginField({ patientId, value, onSaved }: { patientId: number; value: string | null; onSaved: (origin: string | null) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(value ?? "");
+  const [options, setOptions] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const open = () => {
+    setText(value ?? "");
+    setEditing(true);
+    api.origins().then((list) => setOptions(list.map((o) => o.origin))).catch(() => {});
+  };
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await api.setOrigin(patientId, text.trim() || null);
+      onSaved(res.origin);
+      setEditing(false);
+      setError(null);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+  if (!editing) {
+    return (
+      <span className="flex items-center gap-2">
+        {value ?? <span className="text-muted-foreground">nie wpisano</span>}
+        <Button type="button" variant="link" size="sm" className="h-auto px-0" onClick={open}>
+          Zmień
+        </Button>
+      </span>
+    );
+  }
+  return (
+    <form onSubmit={save} className="flex max-w-md flex-wrap items-center gap-2">
+      <Input aria-label="Pochodzenie" list="origin-options" value={text} onChange={(e) => setText(e.target.value)} autoFocus className="h-8 min-w-0 flex-1" />
+      <datalist id="origin-options">
+        {options.map((o) => (
+          <option key={o} value={o} />
+        ))}
+      </datalist>
+      <Button type="submit" size="sm">
+        Zapisz
+      </Button>
+      <Button type="button" size="sm" variant="outline" onClick={() => setEditing(false)}>
+        Anuluj
+      </Button>
+      {error && <span role="alert" className="text-destructive">{error}</span>}
+    </form>
   );
 }
 

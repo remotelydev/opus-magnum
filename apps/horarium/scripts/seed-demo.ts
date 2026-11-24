@@ -522,6 +522,23 @@ async function demoStatistics(client: Pick<Db, "query">) {
   );
 }
 
+/** For the hidden reports: where some patients came from, and a commission rate for each person. Once. */
+async function demoHiddenReports(client: Pick<Db, "query">) {
+  const done = await client.query("SELECT 1 FROM staff_commissions LIMIT 1");
+  if (done.rowCount) return;
+  const origins = ["Polecenie przez innego klienta", "Facebook", "Przechodzień", "moment.pl", "Ulotki", "Reklama"];
+  // Roughly two in three patients without an origin get one; the rest stay "Nie wpisano".
+  await client.query(
+    `UPDATE patients SET origin = ($1::text[])[1 + (id / 3) % array_length($1::text[], 1)]
+      WHERE origin IS NULL AND id % 3 <> 0`,
+    [origins],
+  );
+  await client.query(
+    `INSERT INTO staff_commissions (staff_id, rate)
+     SELECT id, CASE WHEN name ILIKE 'hig.%' OR title ILIKE 'higien%' THEN 8 ELSE 15 END FROM staff WHERE kind = 'person'`,
+  );
+}
+
 /** Demo logins, all with the demo password: reception, admin, Bartosz (admin who also sees the reports the
  *  clinic does not use yet), a doctor tied to the first person in the calendar, and a hygienist tied to the first
  *  hygienist (both close their own visits). */
@@ -564,6 +581,7 @@ try {
       await demoVersumHistory(db);
       await addVersumDemo(db);
       await demoStatistics(db);
+      await demoHiddenReports(db);
       await demoLogins(db);
       console.log("demo data already at full scale");
       process.exit(0);
@@ -590,6 +608,7 @@ try {
 
   await addVersumDemo(db);
   await demoStatistics(db);
+  await demoHiddenReports(db);
   await demoLogins(db);
   console.log(
     `demo data: ${counts.staff} staff, ${counts.services} services, ${counts.patients} patients, ${counts.visits} visits, logins recepcja/admin/bartosz/lekarz/higienistka`,

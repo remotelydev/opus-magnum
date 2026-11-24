@@ -1,8 +1,9 @@
 import { policedFastify, tagGuard } from "./route-policy.js";
 import fastifyStatic from "@fastify/static";
 import { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
-import { login, logout, ROLES, userForToken, type Role, type User } from "./auth.js";
+import { HIDDEN_REPORTS, login, logout, ROLES, userForToken, type Role, type User } from "./auth.js";
 import { audit, type Db } from "./db.js";
+import { registerHiddenReports } from "./hidden-reports.js";
 import { registerIntake } from "./intake.js";
 import { createLoginLimiter, type LoginLimiter } from "./login-limit.js";
 import { normalizePhone } from "./phone.js";
@@ -42,6 +43,14 @@ function guard(roles: Role[]) {
   return tagGuard("staff", async (req: FastifyRequest, reply: FastifyReply) => {
     if (!req.user) return reply.code(401).send({ error: "Zaloguj się." });
     if (!roles.includes(req.user.role)) return reply.code(403).send({ error: "Brak uprawnień." });
+  });
+}
+
+/** A login with this feature switched on (e.g. hidden reports); any role. */
+function featureGuard(feature: string) {
+  return tagGuard("staff", async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!req.user) return reply.code(401).send({ error: "Zaloguj się." });
+    if (!req.user.features.includes(feature)) return reply.code(403).send({ error: "Brak uprawnień." });
   });
 }
 
@@ -265,6 +274,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
   registerServices(app, db, { read: guard(ALL), admin: guard(ADMIN) }, opts.publicOrigins ?? []);
   registerIntake(app, db, { desk: guard(WRITE_ROLES) }, limiter);
   registerStatistics(app, db, { stats: guard(["admin", "doctor"]), admin: guard(ADMIN), checkout: guard(["admin", "reception", "doctor", "hygienist"]) });
+  registerHiddenReports(app, db, { hidden: featureGuard(HIDDEN_REPORTS) });
 
   // --- patients ---------------------------------------------------------------------------
   app.get<{ Querystring: { q?: string; limit?: number } }>(
