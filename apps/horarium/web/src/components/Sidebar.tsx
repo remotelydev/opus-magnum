@@ -3,6 +3,7 @@ import {
   Bars3Icon,
   BuildingStorefrontIcon,
   CalendarDaysIcon,
+  ChartBarIcon,
   ChevronDoubleLeftIcon,
   ChevronDoubleRightIcon,
   ClipboardDocumentListIcon,
@@ -15,10 +16,10 @@ import {
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 import type { ComponentType, ReactNode, SVGProps } from "react";
-import type { User } from "../lib/api.ts";
+import { isClinical, type User } from "../lib/api.ts";
 import { useTheme } from "./ThemeToggle.tsx";
 
-export type View = "calendar" | "patients" | "intake" | "services" | "staff" | "schedule" | "opening";
+export type View = "calendar" | "patients" | "intake" | "stats" | "services" | "staff" | "schedule" | "opening";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -28,6 +29,7 @@ const ROLE_LABEL: Record<User["role"], string> = {
   admin: "administrator",
   reception: "recepcja",
   doctor: "lekarz",
+  hygienist: "higienistka",
 };
 
 /** Left panel: logo, sections, and the user's settings at the bottom. Collapses to icons. */
@@ -56,11 +58,13 @@ export function Sidebar({
   const items: Array<{ id: View; label: string; icon: Icon }> = [
     { id: "calendar", label: "Terminarz", icon: CalendarDaysIcon },
     { id: "patients", label: "Pacjenci", icon: UsersIcon },
-    ...(user.role !== "doctor" ? [{ id: "intake" as const, label: "Rejestracje", icon: ClipboardDocumentListIcon }] : []),
+    ...(!isClinical(user.role) ? [{ id: "intake" as const, label: "Rejestracje", icon: ClipboardDocumentListIcon }] : []),
+    // Admins see the whole clinic, a doctor their own numbers; reception and hygienists do not see it.
+    ...(user.role === "admin" || user.role === "doctor" ? [{ id: "stats" as const, label: "Statystyki", icon: ChartBarIcon }] : []),
   ];
   const admin = user.role === "admin";
   const settings: Array<{ id: View; label: string; icon: Icon }> = [
-    ...(user.role !== "doctor" ? [{ id: "schedule" as const, label: "Grafik pracy", icon: ClockIcon }] : []),
+    ...(!isClinical(user.role) ? [{ id: "schedule" as const, label: "Grafik pracy", icon: ClockIcon }] : []),
     ...(admin
       ? [
           { id: "staff" as const, label: "Pracownicy", icon: IdentificationIcon },

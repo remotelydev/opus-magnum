@@ -6,7 +6,7 @@ const scryptAsync = promisify(scrypt) as (pw: string, salt: Buffer, len: number)
 const SESSION_HOURS = 12;
 export const MIN_PASSWORD_LENGTH = 10;
 
-export const ROLES = ["admin", "reception", "doctor"] as const;
+export const ROLES = ["admin", "reception", "doctor", "hygienist"] as const;
 export type Role = (typeof ROLES)[number];
 export interface User {
   id: number;
@@ -14,7 +14,12 @@ export interface User {
   name: string;
   role: Role;
   staffId: number | null;
+  /** Features switched on for this login only, e.g. "hidden_reports". */
+  features: string[];
 }
+
+/** Reports the clinic does not use yet (tips, client origins, commissions, stock): one login sees them. */
+export const HIDDEN_REPORTS = "hidden_reports";
 
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16);
@@ -43,19 +48,20 @@ function toUser(row: Record<string, unknown>): User {
     name: row.name as string,
     role: row.role as Role,
     staffId: (row.staff_id as number | null) ?? null,
+    features: (row.features as string[] | undefined) ?? [],
   };
 }
 
 export async function createUser(
   db: Db,
-  input: { login: string; name: string; role: Role; password: string; staffId?: number | null },
+  input: { login: string; name: string; role: Role; password: string; staffId?: number | null; features?: string[] },
 ): Promise<number> {
   if (input.password.length < MIN_PASSWORD_LENGTH) {
     throw new Error(`password must be at least ${MIN_PASSWORD_LENGTH} characters`);
   }
   const { rows } = await db.query<{ id: number }>(
-    "INSERT INTO users (login, name, role, password_hash, staff_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-    [input.login.toLowerCase(), input.name, input.role, await hashPassword(input.password), input.staffId ?? null],
+    "INSERT INTO users (login, name, role, password_hash, staff_id, features) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+    [input.login.toLowerCase(), input.name, input.role, await hashPassword(input.password), input.staffId ?? null, input.features ?? []],
   );
   return rows[0].id;
 }
@@ -63,7 +69,7 @@ export async function createUser(
 /** The active user with this login and password, or null. Opens no session. */
 export async function checkCredentials(db: Db, loginName: string, password: string): Promise<User | null> {
   const { rows } = await db.query(
-    "SELECT id, login, name, role, staff_id, password_hash FROM users WHERE login = $1 AND active",
+    "SELECT id, login, name, role, staff_id, features, password_hash FROM users WHERE login = $1 AND active",
     [loginName.toLowerCase()],
   );
   const row = rows[0];
@@ -102,7 +108,7 @@ export { sha256 as hashToken };
 
 export async function userForToken(db: Db, token: string): Promise<User | null> {
   const { rows } = await db.query(
-    `SELECT u.id, u.login, u.name, u.role, u.staff_id
+    `SELECT u.id, u.login, u.name, u.role, u.staff_id, u.features
        FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = $1 AND s.expires_at > now() AND u.active`,
     [sha256(token)],

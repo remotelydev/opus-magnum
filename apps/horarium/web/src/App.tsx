@@ -10,9 +10,10 @@ import { OpeningHoursPage } from "./components/OpeningHoursPage.tsx";
 import { SchedulePage } from "./components/SchedulePage.tsx";
 import { ServicesPage } from "./components/ServicesPage.tsx";
 import { StaffPage } from "./components/StaffPage.tsx";
+import { StatisticsPage } from "./components/StatisticsPage.tsx";
 import { Login } from "./components/Login.tsx";
 import { BottomNav, Sidebar, type View } from "./components/Sidebar.tsx";
-import { api, ApiError, type Service, type Site, type Staff, type User } from "./lib/api.ts";
+import { api, ApiError, closesVisitsOf, isClinical, type Service, type Site, type Staff, type User } from "./lib/api.ts";
 import { readChoice, saveChoice, selectedIds, workHours, workingIds, type ColumnChoice } from "./lib/columns.ts";
 import { readCollapsed, saveCollapsed } from "./lib/sidebar.ts";
 import { ALL_SITES, calendarColumns, siteColor } from "./lib/sites.ts";
@@ -104,7 +105,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   useEffect(() => {
     // Reference data for the calendar and patients; reloaded on return so settings changes show up.
-    if (view !== "calendar" && view !== "patients" && view !== "intake") return;
+    if (view !== "calendar" && view !== "patients" && view !== "intake" && view !== "stats") return;
     Promise.all([api.sites(), api.staff(), api.services()])
       .then(([si, st, se]) => {
         setSites(si);
@@ -320,7 +321,9 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
           </header>
         )}
         {error && <p className="px-4 py-2 text-sm text-destructive">{error}</p>}
-        {view === "services" ? (
+        {view === "stats" ? (
+          <StatisticsPage user={user} sites={sites} staff={staff} />
+        ) : view === "services" ? (
           <ServicesPage />
         ) : view === "staff" ? (
           <StaffPage
@@ -349,7 +352,7 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
             services={services}
             site={site}
             staff={staff}
-            canEdit={user.role !== "doctor"}
+            canEdit={!isClinical(user.role)}
             canSeeHistory={user.role === "admin"}
             onOpenDay={openVisit}
           />
@@ -375,9 +378,10 @@ function Workspace({ user, onLogout }: { user: User; onLogout: () => void }) {
               error={day.error}
               reload={day.reload}
               services={services}
-              canEdit={user.role !== "doctor"}
+              canEdit={!isClinical(user.role)}
               canSeeHistory={user.role === "admin"}
-              canDescribe={user.role === "admin" || user.role === "doctor"}
+              canDescribe={user.role === "admin" || isClinical(user.role)}
+              closesVisitsOf={closesVisitsOf(user)}
               showCancelled={showCancelled}
             />
           </div>

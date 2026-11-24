@@ -3,7 +3,73 @@ export interface User {
   id: number;
   login: string;
   name: string;
-  role: "admin" | "reception" | "doctor";
+  role: "admin" | "reception" | "doctor" | "hygienist";
+  /** The person's staff card (doctors): their own visits and numbers. */
+  staffId: number | null;
+  /** Features switched on for this login only, e.g. "hidden_reports". */
+  features: string[];
+}
+/** Doctors and hygienists: they treat, they do not book. */
+export const isClinical = (role: User["role"]) => role === "doctor" || role === "hygienist";
+
+export type PaymentMethod = "cash" | "card";
+export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = { cash: "Gotówka", card: "Karta" };
+export interface CheckoutPayment {
+  method: PaymentMethod;
+  amount: number;
+}
+/** Whose visits this login closes: anyone's (reception, admins), one person's (a doctor), or none. */
+export function closesVisitsOf(user: User): "all" | number | null {
+  if (user.role === "admin" || user.role === "reception") return "all";
+  return isClinical(user.role) ? user.staffId : null;
+}
+export interface CheckoutItem {
+  serviceId: number | null;
+  name: string;
+  price: number;
+}
+/** Report bounds: clinic ("all" = both) and whole days "YYYY-MM-DD". */
+export interface StatsRange {
+  site: string;
+  from: string;
+  to: string;
+}
+export interface FinancialReport {
+  staff: { staffId: number; siteId: string; visits: number; minutes: number; revenue: number }[];
+  totals: { visits: number; minutes: number; revenue: number };
+  methods: { method: string; label: string; amount: number }[];
+}
+export interface ServiceStat {
+  staffId: number;
+  done: boolean;
+  serviceId: number | null;
+  name: string;
+  category: string | null;
+  count: number;
+  amount: number;
+  minutes: number;
+}
+export interface ReturningStat {
+  staffId: number;
+  served: number;
+  new: number;
+  backToClinic: number;
+  backToStaff: number;
+}
+export interface WorktimeStat {
+  staffId: number;
+  workMinutes: number;
+  workDays: number;
+  absenceDays: number;
+  visitMinutes: number;
+}
+export type CashKind = "in" | "out" | "open" | "close";
+export interface CashReport {
+  balance: number;
+  open: boolean;
+  counted: { kind: CashKind; amount: number; at: string; userName: string | null } | null;
+  visits: { id: number; at: string; amount: number; appointmentId: number; patientName: string | null; staffName: string | null; what: string }[];
+  operations: { id: number; kind: CashKind; amount: number; note: string | null; at: string; userName: string | null }[];
 }
 export interface Site {
   id: string;
@@ -309,6 +375,17 @@ export const api = {
       notifyPatient: boolean;
     }>,
   ) => request<{ ok: true; endsAt: string; warnings: string[]; sms?: string }>("PATCH", `/api/appointments/${id}`, body),
+  checkout: (id: number) =>
+    request<{ items: CheckoutItem[]; payments: { method: string; amount: number }[] }>("GET", `/api/appointments/${id}/checkout`),
+  saveCheckout: (id: number, items: { serviceId: number; price: number }[], payments: CheckoutPayment[]) =>
+    request<{ ok: true; total: number }>("PUT", `/api/appointments/${id}/checkout`, { items, payments }),
+  financial: (r: StatsRange) => request<FinancialReport>("GET", `/api/stats/financial?${qs({ ...r })}`),
+  serviceStats: (r: StatsRange) => request<ServiceStat[]>("GET", `/api/stats/services?${qs({ ...r })}`),
+  returning: (r: StatsRange) => request<ReturningStat[]>("GET", `/api/stats/returning?${qs({ ...r })}`),
+  worktime: (r: StatsRange) => request<WorktimeStat[]>("GET", `/api/stats/worktime?${qs({ ...r })}`),
+  cash: (r: StatsRange) => request<CashReport>("GET", `/api/cash?${qs({ ...r })}`),
+  addCash: (body: { siteId: string; kind: CashKind; amount: number; note?: string | null }) =>
+    request<{ id: number }>("POST", "/api/cash", body),
   saveTreatment: (id: number, text: string | null) =>
     request<{ ok: true }>("PUT", `/api/appointments/${id}/treatment`, { text }),
 };

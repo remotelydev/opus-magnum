@@ -7,10 +7,12 @@ import {
   type Appointment,
   type AppointmentStatus,
   type Patient,
+  type Service,
   type Site,
   type Staff,
 } from "../lib/api.ts";
 import { siteName } from "../lib/sites.ts";
+import { CheckoutDialog } from "./CheckoutDialog.tsx";
 import { MoveDialog } from "./MoveDialog.tsx";
 import { PatientHistory } from "./PatientHistory.tsx";
 import { VisitHistory } from "./VisitHistory.tsx";
@@ -20,10 +22,14 @@ interface Props {
   appointment: Appointment;
   staff: Staff[];
   sites: Site[];
+  /** Price list, for closing the visit. */
+  services: Service[];
   canEdit: boolean;
   canSeeHistory?: boolean;
   /** Doctors and admins write the treatment description. */
   canDescribe?: boolean;
+  /** Closing the visit with services and payment (reception, admins, the visit's own doctor). */
+  canClose?: boolean;
   onClose: () => void;
   onChanged: (message: string) => void;
   /** "Karta pacjenta": open the patient's full card. */
@@ -38,9 +44,11 @@ export function AppointmentPanel({
   appointment: a,
   staff,
   sites,
+  services,
   canEdit,
   canSeeHistory = false,
   canDescribe = false,
+  canClose = false,
   onClose,
   onChanged,
   onOpenPatient,
@@ -55,6 +63,7 @@ export function AppointmentPanel({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [checkout, setCheckout] = useState(false);
   const [treatment, setTreatment] = useState(a.treatmentNotes ?? "");
   // A new time waits for confirmation, as a drag does.
   const [pendingTime, setPendingTime] = useState<{ startsAt: Date; endsAt: Date; minutes: number } | null>(null);
@@ -176,11 +185,17 @@ export function AppointmentPanel({
                 size="sm"
                 variant={s === "cancelled" ? "destructive" : "outline"}
                 disabled={busy}
-                onClick={() => run({ status: s }, `Status: ${STATUS_LABEL[s]}.`)}
+                // A patient's visit is finished by closing it: what was done and how it was paid.
+                onClick={() => (s === "done" && a.patientId ? setCheckout(true) : run({ status: s }, `Status: ${STATUS_LABEL[s]}.`))}
               >
-                {s === "booked" ? "Przywróć" : STATUS_LABEL[s]}
+                {s === "booked" ? "Przywróć" : s === "done" && a.patientId ? "Zakończ wizytę" : STATUS_LABEL[s]}
               </Button>
             ))}
+            {a.status === "done" && a.patientId && (
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => setCheckout(true)}>
+                Usługi i płatność
+              </Button>
+            )}
           </section>
 
           <section className="space-y-2">
@@ -219,6 +234,15 @@ export function AppointmentPanel({
             </Button>
           </section>
         </>
+      )}
+
+      {!canEdit && canClose && a.patientId && a.status !== "cancelled" && (
+        // A doctor closes their own visit without the rest of reception's controls.
+        <section>
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => setCheckout(true)}>
+            {a.status === "done" ? "Usługi i płatność" : "Zakończ wizytę"}
+          </Button>
+        </section>
       )}
 
       {error && (
@@ -281,6 +305,17 @@ export function AppointmentPanel({
           <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Historia zmian</summary>
           <div className="mt-2">{historyOpen && <PatientHistory patientId={a.patientId} />}</div>
         </details>
+      )}
+      {checkout && (
+        <CheckoutDialog
+          appointment={a}
+          services={services}
+          onCancel={() => setCheckout(false)}
+          onDone={(message) => {
+            setCheckout(false);
+            onChanged(message);
+          }}
+        />
       )}
       {pendingTime && (
         <MoveDialog

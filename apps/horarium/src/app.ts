@@ -9,6 +9,7 @@ import { normalizePhone } from "./phone.js";
 import { movedVisitText, type SendSms } from "./sms.js";
 import { registerServices } from "./services.js";
 import { CLINIC_TZ, registerSettings } from "./settings.js";
+import { registerStatistics } from "./statistics.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -263,6 +264,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
   registerSettings(app, db, { read: guard(ALL), write: guard(WRITE_ROLES), admin: guard(ADMIN) }, opts.publicOrigins ?? []);
   registerServices(app, db, { read: guard(ALL), admin: guard(ADMIN) }, opts.publicOrigins ?? []);
   registerIntake(app, db, { desk: guard(WRITE_ROLES) }, limiter);
+  registerStatistics(app, db, { stats: guard(["admin", "doctor"]), admin: guard(ADMIN), checkout: guard(["admin", "reception", "doctor", "hygienist"]) });
 
   // --- patients ---------------------------------------------------------------------------
   app.get<{ Querystring: { q?: string; limit?: number } }>(
@@ -817,7 +819,7 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
   app.put<{ Params: { id: number }; Body: { text: string | null } }>(
     "/api/appointments/:id/treatment",
     { config: { access: "staff", audited: true },
-      preHandler: guard(["admin", "doctor"]),
+      preHandler: guard(["admin", "doctor", "hygienist"]),
       schema: {
         params: { type: "object", properties: { id: { type: "integer" } } },
         body: { type: "object", required: ["text"], properties: { text: { type: ["string", "null"], maxLength: 20000 } } },
