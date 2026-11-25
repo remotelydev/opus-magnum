@@ -6,6 +6,7 @@ import { api, type Appointment, type Patient, type PatientCardDetails, type Pati
 import { ALL_SITES } from "../lib/sites.ts";
 import { formatMinutes, toClinicTime, todayInClinic } from "../lib/time.ts";
 import { BookingDialog } from "./BookingDialog.tsx";
+import { Attachments, DentalHistory } from "./CardExtras.tsx";
 import { PatientHistory } from "./PatientHistory.tsx";
 import { VisitHistory } from "./VisitHistory.tsx";
 
@@ -332,6 +333,13 @@ function PatientCardView({
       )}
 
       <PatientDetails card={card} canSetOrigin={canSetOrigin} onOriginSaved={(origin) => setCard({ ...card, origin })} />
+
+      {(card.dentalEntries.length > 0 || card.attachments.length > 0) && (
+        <section className="space-y-3">
+          <Attachments patientId={card.id} items={card.attachments} />
+          <DentalHistory entries={card.dentalEntries} />
+        </section>
+      )}
 
       <section className="space-y-2">
         <h2 className="text-sm font-medium">Nadchodzące wizyty</h2>

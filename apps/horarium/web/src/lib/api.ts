@@ -200,7 +200,33 @@ export interface PatientCardDetails {
   referredBy: { id: number; name: string } | null;
   importedFrom: "versum" | null;
   createdAt: string | null;
+  /** Dental diagram entries (from Versum), newest first. */
+  dentalEntries: DentalEntry[];
+  /** Photos and files attached to the card, newest first; the content is at attachmentUrl(). */
+  attachments: Attachment[];
 }
+export interface DentalEntry {
+  id: number;
+  tooth: number;
+  surface: string | null;
+  diagnosis: string | null;
+  treatment: string | null;
+  doctorName: string | null;
+  description: string | null;
+  color: string | null;
+  recordedAt: string;
+}
+export interface Attachment {
+  id: number;
+  kind: "photo" | "file";
+  name: string;
+  contentType: string;
+  size: number;
+  description: string | null;
+  addedAt: string;
+}
+export const attachmentUrl = (patientId: number, attachmentId: number, download = false) =>
+  `/api/patients/${patientId}/attachments/${attachmentId}${download ? "?download" : ""}`;
 /** What the patient search returns: no notes or medical flags. */
 export type PatientSummary = Pick<Patient, "id" | "firstName" | "lastName" | "phone" | "birthDate">;
 export interface PatientPage {

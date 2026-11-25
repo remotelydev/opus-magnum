@@ -1,6 +1,8 @@
 // Made-up patients in the shape of the Versum export (scripts/versum/extract-patients.js), for the demo
 // database and the preview: they go through the real importer, so the preview shows imported cards.
 // Every name, number and note is invented; nothing is copied from Versum.
+import { deflateSync } from "node:zlib";
+import type { VersumAssetMeta, VersumExtrasRecord } from "../../src/versum-extras.js";
 import type { VersumPatientRecord } from "../../src/versum-patients.js";
 
 const PEOPLE: [first: string, last: string, gender: "female" | "male"][] = [
@@ -84,4 +86,64 @@ export function demoVersumPatients(): VersumPatientRecord[] {
       fetchedAt: "2026-11-22T12:00:00.000Z",
     };
   });
+}
+
+/** A plain PNG of one colour (stand-in for a photo from the card's gallery). */
+function solidPng(width: number, height: number, [r, g, b]: [number, number, number]): Buffer {
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  const crc = (buf: Buffer) => {
+    let c = 0xffffffff;
+    for (const byte of buf) c = crcTable[(c ^ byte) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type: string, data: Buffer) => {
+    const out = Buffer.alloc(12 + data.length);
+    out.writeUInt32BE(data.length, 0);
+    out.write(type, 4, "ascii");
+    data.copy(out, 8);
+    out.writeUInt32BE(crc(out.subarray(4, 8 + data.length)), 8 + data.length);
+    return out;
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8; // bit depth
+  header[9] = 2; // RGB
+  const row = Buffer.concat([Buffer.from([0]), Buffer.from(Array.from({ length: width }, () => [r, g, b]).flat())]);
+  const pixels = deflateSync(Buffer.concat(Array.from({ length: height }, () => row)));
+  return Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), chunk("IHDR", header), chunk("IDAT", pixels), chunk("IEND", Buffer.alloc(0))]);
+}
+
+/** Made-up dental diagram entries for a few demo patients, in the shape of versum-dodatki-….ndjson. */
+export function demoVersumExtras(): VersumExtrasRecord[] {
+  const entry = (id: number, tooth: number, surface: string, diagnosis: string | null, treatment: string | null, day: string, description = "") => ({
+    id, tooth, surface: `${tooth}${surface}`, diagnosis_name: diagnosis, treatment_name: treatment,
+    employee_name: "lek. dent. Demo Lekarz", description, color: diagnosis === "Próchnica" ? "#bf2941" : "#369207",
+    created_at: `${day}T10:30:00.000+01:00`,
+  });
+  return [
+    { id: "90000001", dental: [
+      entry(7001, 16, "kor", "Próchnica", null, "2024-02-12"),
+      entry(7002, 16, "P1", null, "Wypełnienie ubytku ostateczne", "2024-02-26", "Kompozyt, kolor A2."),
+      entry(7003, 46, "kor", "Ząb do usunięcia", null, "2024-03-04"),
+    ] },
+    { id: "90000003", dental: [entry(7004, 21, "P5", "Wypełnienie", null, "2023-11-20")] },
+  ];
+}
+
+/** Made-up photos and files for the first demo patient, as the attachments ZIP holds them. */
+export function demoVersumAssets(): { meta: VersumAssetMeta; data: Buffer }[] {
+  return [
+    { meta: { patientId: "90000001", assetId: "8001", kind: "photo", name: "przed-leczeniem.png", type: "image/png",
+        createdAt: "12.02.2024 10:40", description: "Przed leczeniem", path: "" }, data: solidPng(160, 120, [214, 198, 170]) },
+    { meta: { patientId: "90000001", assetId: "8002", kind: "photo", name: "po-leczeniu.png", type: "image/png",
+        createdAt: "26.02.2024 11:05", description: "Po leczeniu", path: "" }, data: solidPng(160, 120, [236, 232, 220]) },
+    { meta: { patientId: "90000001", assetId: "8003", kind: "file", name: "skierowanie-rtg.txt", type: "text/plain",
+        createdAt: "04.03.2024 09:15", description: null, path: "" },
+      data: Buffer.from("Skierowanie na zdjęcie pantomograficzne (dane przykładowe).\n", "utf8") },
+  ];
 }
