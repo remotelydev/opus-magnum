@@ -1,18 +1,18 @@
 // Import the dental diagram entries and the card photos and files from Versum. Run after the patient
 // import (patients are found by their Versum id).
 //
-//   pnpm --filter horarium import:versum-extras /path/to/versum-dodatki-….ndjson /path/to/versum-zalaczniki-….zip
+//   pnpm --filter horarium import:versum-extras /path/to/versum-dodatki-….ndjson /path/to/versum-zalaczniki-…-*.zip
 //
-// The ZIP is optional. Runs in one transaction; safe to run again. Prints counts only, never patient data.
+// The ZIP files (one or more parts) are optional. Runs in one transaction; safe to run again. Prints counts only, never patient data.
 import { readFile } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 import { createPool } from "../src/db.js";
 import { assetsFromZip, importVersumExtras, readStoredZip, type VersumExtrasRecord } from "../src/versum-extras.js";
 
-const [extrasFile, zipFile] = process.argv.slice(2);
+const [extrasFile, ...zipFiles] = process.argv.slice(2);
 if (!extrasFile) {
-  console.error("usage: import-versum-extras <versum-dodatki-….ndjson> [versum-zalaczniki-….zip]");
+  console.error("usage: import-versum-extras <versum-dodatki-….ndjson> [versum-zalaczniki-….zip ...]");
   process.exit(2);
 }
 
@@ -29,12 +29,21 @@ async function* records(path: string): AsyncGenerator<VersumExtrasRecord> {
   }
 }
 
-const assets = zipFile ? assetsFromZip(readStoredZip(await readFile(zipFile))) : [];
+// One part at a time, so only one ZIP is in memory while its files are written.
+async function* parts() {
+  for (const file of zipFiles) yield assetsFromZip(readStoredZip(await readFile(file)));
+}
 const pool = createPool();
 const client = await pool.connect();
 try {
   await client.query("BEGIN");
-  const result = await importVersumExtras(client, records(extrasFile), assets);
+  const result = await importVersumExtras(client, records(extrasFile));
+  for await (const assets of parts()) {
+    const r = await importVersumExtras(client, [], assets);
+    result.attachments.created += r.attachments.created;
+    result.attachments.updated += r.attachments.updated;
+    result.problems.push(...r.problems);
+  }
   await client.query("COMMIT");
   console.log(
     `dental entries: created ${result.dental.created}, updated ${result.dental.updated}; ` +

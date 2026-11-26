@@ -6,7 +6,7 @@
 //   versumAssets.list()      count of assets found (no patient data)
 //   versumAssets.run()       fetch every asset not fetched yet (one request at a time, >= 1.2 s apart)
 //   versumAssets.status()
-//   versumAssets.download()  save versum-zalaczniki-YYYY-MM-DD.zip:
+//   versumAssets.download()  save versum-zalaczniki-YYYY-MM-DD-N.zip (parts of at most 200 MB), each with
 //                              manifest.json  [{ patientId, assetId, kind, name, createdAt, description, path }]
 //                              <patientId>/<assetId>-<name>
 (() => {
@@ -204,24 +204,45 @@
     return new Blob([...parts, ...central, end.buffer], { type: "application/zip" });
   }
 
-  async function download() {
+  /**
+   * Save the assets as ZIP files of at most `maxMB` each (a browser struggles with one huge file), each
+   * with its own manifest.json: versum-zalaczniki-YYYY-MM-DD-1.zip, -2.zip, ...
+   */
+  async function download(maxMB = 200) {
     const rows = await getAll(await assetsDb(), STORE);
-    const entries = [];
-    const manifest = [];
+    const groups = [[]];
+    let size = 0;
     for (const r of rows) {
-      const path = `${r.patientId}/${r.assetId}-${safe(r.name)}`;
-      entries.push({ path, data: new Uint8Array(await r.blob.arrayBuffer()) });
-      const { blob, url, ...meta } = r;
-      manifest.push({ ...meta, path });
+      if (size + r.size > maxMB * 1024 * 1024 && groups.at(-1).length) {
+        groups.push([]);
+        size = 0;
+      }
+      groups.at(-1).push(r);
+      size += r.size;
     }
-    entries.unshift({ path: "manifest.json", data: new TextEncoder().encode(JSON.stringify(manifest, null, 1)) });
-    const file = `versum-zalaczniki-${new Date().toISOString().slice(0, 10)}.zip`;
-    const blob = await zip(entries);
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = file;
-    a.click();
-    return { assets: rows.length, bytes: blob.size, file };
+    const day = new Date().toISOString().slice(0, 10);
+    const saved = [];
+    for (const [i, group] of groups.entries()) {
+      const entries = [];
+      const manifest = [];
+      for (const r of group) {
+        const path = `${r.patientId}/${r.assetId}-${safe(r.name)}`;
+        entries.push({ path, data: new Uint8Array(await r.blob.arrayBuffer()) });
+        const { blob, url, ...meta } = r;
+        manifest.push({ ...meta, path });
+      }
+      entries.unshift({ path: "manifest.json", data: new TextEncoder().encode(JSON.stringify(manifest, null, 1)) });
+      const file = `versum-zalaczniki-${day}-${i + 1}.zip`;
+      const blob = await zip(entries);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = file;
+      a.click();
+      await sleep(3000);
+      URL.revokeObjectURL(a.href);
+      saved.push({ file, assets: group.length, bytes: blob.size });
+    }
+    return saved;
   }
 
   async function list() {
