@@ -12,6 +12,7 @@
     "user:create": "tsx scripts/create-user.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "import:versum-patients": "tsx scripts/import-versum-patients.ts",
+    "import:versum-extras": "tsx scripts/import-versum-extras.ts",
     "test": "TZ=Europe/Warsaw tsx --test --test-concurrency=1 src/**/*.test.ts web/src/**/*.test.ts",
     "lint": "tsc --noEmit && tsc --noEmit -p web",
     "import:versum-visits": "tsx scripts/import-versum-visits.ts"

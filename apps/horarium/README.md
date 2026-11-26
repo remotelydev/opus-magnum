@@ -100,6 +100,14 @@ pnpm --filter horarium import:versum-patients /path/to/versum-pacjenci-2026-11-2
 
 Each patient is linked in `import_refs` (`versum`, `patient`, Versum customer id), which the visit-history import uses. Versum's "Opis" goes to `description`; health checkboxes, allergies and other diseases to `medical_flags`; the whole source record is kept in `import_data`. The demo data includes a dozen made-up cards imported this way.
 
+The **dental diagram, gallery photos and attached files** come the same way, after the cards: `scripts/versum/extract-extras.js` checks the three tabs of every card and saves `versum-dodatki-YYYY-MM-DD.ndjson` (only cards that have something), then `scripts/versum/extract-assets.js` downloads the photos and files into `versum-zalaczniki-YYYY-MM-DD-N.zip` parts of at most 200 MB (each with a `manifest.json`). On the clinic machine, after the patient import:
+
+```bash
+pnpm --filter horarium import:versum-extras /path/to/versum-dodatki-2026-11-26.ndjson /path/to/versum-zalaczniki-2026-11-26-*.zip
+```
+
+They show on the patient card under "Zdjęcia i pliki" and "Diagram uzębienia z Versum" (read-only). The files are stored in the database.
+
 ## Tests
 
 Tests need an empty database they can wipe:

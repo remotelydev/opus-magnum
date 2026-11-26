@@ -12,6 +12,8 @@ erDiagram
     sites ||--o{ appointments : "at"
     patients ||--o{ appointments : "books"
     patients |o--o{ patients : "referred"
+    patients ||--o{ patient_dental_entries : "dental diagram"
+    patients ||--o{ patient_attachments : "photos and files"
     services ||--o{ appointments : "for"
     users ||--o{ appointments : "created by"
     users ||--o{ sessions : "logged in"
@@ -148,6 +150,30 @@ erDiagram
         time starts
         time ends
     }
+    patient_dental_entries {
+        serial id PK
+        int patient_id FK
+        smallint tooth "FDI, e.g. 16"
+        text surface "Versum code, e.g. 16kor, 26P1"
+        text diagnosis
+        text treatment
+        text doctor_name
+        text description
+        text color
+        timestamptz recorded_at
+        jsonb import_data
+    }
+    patient_attachments {
+        serial id PK
+        int patient_id FK
+        text kind "photo | file"
+        text name
+        text content_type
+        int size
+        bytea data
+        text description
+        timestamptz added_at
+    }
     import_refs {
         text source PK
         text entity PK
@@ -161,5 +187,6 @@ Rules the database enforces:
 - `price_max >= price_min`, `ends_at > starts_at`, durations above zero.
 - Opening hours and work patterns are clinic-local times (Europe/Warsaw); a weekday without an `opening_hours` row is closed.
 - `work_patterns` is the template; `schedules` holds the actual blocks the calendar shows. Generating from the pattern rewrites only `work` blocks, never absences.
-- `import_refs` is used only by a one-off data import, so it can run again without duplicates. The app never reads it; it can be dropped after the move. Versum patients are `('versum', 'patient', <Versum customer id>)`.
+- `import_refs` is used only by a one-off data import, so it can run again without duplicates. The app never reads it; it can be dropped after the move. Versum patients are `('versum', 'patient', <Versum customer id>)`, dental entries `('versum', 'dental_entry', <id>)`, photos and files `('versum', 'attachment', <asset id>)`.
 - `patients.import_data` keeps the whole Versum record of an imported card; the app only reports that the card came from Versum.
+- `patient_attachments.data` holds the file itself, so a database backup holds everything. Opening one is logged (`patient.attachment_view`); only images and PDFs open in the browser, anything else downloads.

@@ -11,8 +11,9 @@
 import { createUser, HIDDEN_REPORTS, type Role } from "../src/auth.js";
 import { createPool, migrate, type Db } from "../src/db.js";
 import { STAFF_PALETTE } from "../src/settings.js";
+import { importVersumExtras } from "../src/versum-extras.js";
 import { importVersumPatients } from "../src/versum-patients.js";
-import { demoVersumPatients } from "./versum/demo-patients.js";
+import { demoVersumAssets, demoVersumExtras, demoVersumPatients } from "./versum/demo-patients.js";
 
 const DEMO_PASSWORD = process.env.CLINIC_PASSWORD ?? "demo-demo-demo";
 const DEMO_ADMIN_NAME = "Administrator (demo)";
@@ -302,13 +303,32 @@ async function resetDemo(client: Queryable) {
  */
 async function addVersumDemo(db: Db) {
   const done = await db.query("SELECT 1 FROM import_refs WHERE source = 'versum' AND entity = 'patient' LIMIT 1");
-  if (done.rowCount) return;
+  if (done.rowCount) return addVersumExtrasDemo(db);
   const client = await db.connect();
   try {
     await client.query("BEGIN");
     const result = await importVersumPatients(client, demoVersumPatients());
     await client.query("COMMIT");
     console.log(`demo data: ${result.created} patients imported from a made-up Versum export`);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+  await addVersumExtrasDemo(db);
+}
+
+/** Dental diagram entries, photos and a file for a few of the imported demo patients (once). */
+async function addVersumExtrasDemo(db: Db) {
+  const done = await db.query("SELECT 1 FROM import_refs WHERE source = 'versum' AND entity = 'dental_entry' LIMIT 1");
+  if (done.rowCount) return;
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await importVersumExtras(client, demoVersumExtras(), demoVersumAssets());
+    await client.query("COMMIT");
+    console.log(`demo data: ${result.dental.created} dental entries, ${result.attachments.created} photos and files`);
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

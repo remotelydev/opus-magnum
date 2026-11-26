@@ -369,7 +369,71 @@ export function buildApp(db: Db, opts: AppOptions = {}): FastifyInstance {
         }
         for (const a of appointments) a.payments = byVisit.get(a.id as number) ?? [];
       }
-      return { ...patientRow(rows[0]), appointments };
+      const [dental, files] = await Promise.all([
+        db.query(
+          `SELECT id, tooth, surface, diagnosis, treatment, doctor_name, description, color, recorded_at
+             FROM patient_dental_entries WHERE patient_id = $1 ORDER BY recorded_at DESC, id DESC`,
+          [req.params.id],
+        ),
+        db.query(
+          `SELECT id, kind, name, content_type, size, description, added_at
+             FROM patient_attachments WHERE patient_id = $1 ORDER BY added_at DESC, id DESC`,
+          [req.params.id],
+        ),
+      ]);
+      return {
+        ...patientRow(rows[0]),
+        appointments,
+        dentalEntries: dental.rows.map((d) => ({
+          id: d.id,
+          tooth: d.tooth,
+          surface: d.surface,
+          diagnosis: d.diagnosis,
+          treatment: d.treatment,
+          doctorName: d.doctor_name,
+          description: d.description,
+          color: d.color,
+          recordedAt: (d.recorded_at as Date).toISOString(),
+        })),
+        attachments: files.rows.map((f) => ({
+          id: f.id,
+          kind: f.kind,
+          name: f.name,
+          contentType: f.content_type,
+          size: f.size,
+          description: f.description,
+          addedAt: (f.added_at as Date).toISOString(),
+        })),
+      };
+    },
+  );
+
+  // A photo or file from the card. Opening one is logged like opening the card.
+  app.get<{ Params: { id: number; attachmentId: number }; Querystring: { download?: string } }>(
+    "/api/patients/:id/attachments/:attachmentId",
+    {
+      config: { access: "staff", audited: true },
+      preHandler: guard(ALL),
+      schema: { params: { type: "object", properties: { id: { type: "integer" }, attachmentId: { type: "integer" } } } },
+    },
+    async (req, reply) => {
+      const { rows } = await db.query(
+        "SELECT name, content_type, data FROM patient_attachments WHERE id = $1 AND patient_id = $2",
+        [req.params.attachmentId, req.params.id],
+      );
+      if (!rows[0]) return reply.code(404).send({ error: "Nie ma takiego pliku." });
+      await audit(db, req.user!.id, "patient.attachment_view", "patient", req.params.id, { attachmentId: req.params.attachmentId });
+      // Only images and PDFs open in the browser; anything else is downloaded, never rendered.
+      const inline = req.query.download === undefined && /^(image\/(png|jpeg|gif|webp)|application\/pdf)$/.test(rows[0].content_type);
+      return reply
+        .header("content-type", rows[0].content_type)
+        .header("x-content-type-options", "nosniff")
+        .header("cache-control", "private, no-store")
+        .header(
+          "content-disposition",
+          `${inline ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(rows[0].name)}`,
+        )
+        .send(rows[0].data);
     },
   );
 
